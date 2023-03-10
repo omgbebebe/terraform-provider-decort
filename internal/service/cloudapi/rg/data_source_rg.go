@@ -34,35 +34,358 @@ package rg
 
 import (
 	"context"
-	"encoding/json"
-	"net/url"
 	"strconv"
 
 	"github.com/rudecs/terraform-provider-decort/internal/constants"
-	"github.com/rudecs/terraform-provider-decort/internal/controller"
-
-	// "net/url"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
 
-func utilityDataResgroupCheckPresence(ctx context.Context, d *schema.ResourceData, m interface{}) (*ResgroupGetResp, error) {
-	c := m.(*controller.ControllerCfg)
-	urlValues := &url.Values{}
-	rgData := &ResgroupGetResp{}
-
-	urlValues.Add("rgId", strconv.Itoa(d.Get("rg_id").(int)))
-	rgRaw, err := c.DecortAPICall(ctx, "POST", ResgroupGetAPI, urlValues)
-	if err != nil {
-		return nil, err
+func sepsSchemaMake() map[string]*schema.Schema {
+	res := map[string]*schema.Schema{
+		"sep_id": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"data_name": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"disk_size": {
+			Type:     schema.TypeFloat,
+			Computed: true,
+		},
+		"disk_size_max": {
+			Type:     schema.TypeInt,
+			Computed: true,
+		},
 	}
 
-	err = json.Unmarshal([]byte(rgRaw), rgData)
-	if err != nil {
-		return nil, err
+	return res
+}
+
+func resourcesSchemaMake() map[string]*schema.Schema {
+	res := map[string]*schema.Schema{
+		"current": {
+			Type:     schema.TypeList,
+			Computed: true,
+			Elem: &schema.Resource{
+				Schema: map[string]*schema.Schema{
+					"cpu": {
+						Type:     schema.TypeInt,
+						Computed: true,
+					},
+					"disk_size": {
+						Type:     schema.TypeFloat,
+						Computed: true,
+					},
+					"disk_size_max": {
+						Type:     schema.TypeInt,
+						Computed: true,
+					},
+					"extips": {
+						Type:     schema.TypeInt,
+						Computed: true,
+					},
+					"exttraffic": {
+						Type:     schema.TypeInt,
+						Computed: true,
+					},
+					"gpu": {
+						Type:     schema.TypeInt,
+						Computed: true,
+					},
+					"ram": {
+						Type:     schema.TypeInt,
+						Computed: true,
+					},
+					"seps": {
+						Type:     schema.TypeSet,
+						Computed: true,
+						Elem: &schema.Resource{
+							Schema: map[string]*schema.Schema{
+								"sep_id": {
+									Type:     schema.TypeString,
+									Computed: true,
+								},
+								"map": {
+									Type:     schema.TypeMap,
+									Computed: true,
+									Elem: &schema.Schema{
+										Type: schema.TypeString,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		"reserved": {
+			Type:     schema.TypeList,
+			Computed: true,
+			Elem: &schema.Resource{
+				Schema: map[string]*schema.Schema{
+					"cpu": {
+						Type:     schema.TypeInt,
+						Computed: true,
+					},
+					"disk_size": {
+						Type:     schema.TypeFloat,
+						Computed: true,
+					},
+					"disk_size_max": {
+						Type:     schema.TypeInt,
+						Computed: true,
+					},
+					"extips": {
+						Type:     schema.TypeInt,
+						Computed: true,
+					},
+					"exttraffic": {
+						Type:     schema.TypeInt,
+						Computed: true,
+					},
+					"gpu": {
+						Type:     schema.TypeInt,
+						Computed: true,
+					},
+					"ram": {
+						Type:     schema.TypeInt,
+						Computed: true,
+					},
+					"seps": {
+						Type:     schema.TypeSet,
+						Computed: true,
+						Elem: &schema.Resource{
+							Schema: map[string]*schema.Schema{
+								"sep_id": {
+									Type:     schema.TypeString,
+									Computed: true,
+								},
+								"map": {
+									Type:     schema.TypeMap,
+									Computed: true,
+									Elem: &schema.Schema{
+										Type: schema.TypeString,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
-	return rgData, nil
+
+	return res
+}
+
+func aclSchemaMake() map[string]*schema.Schema {
+	res := map[string]*schema.Schema{
+		"explicit": {
+			Type:     schema.TypeBool,
+			Computed: true,
+		},
+		"guid": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"right": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"status": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"type": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"user_group_id": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+	}
+
+	return res
+}
+
+func resourceLimitsSchemaMake() map[string]*schema.Schema {
+	res := map[string]*schema.Schema{
+		"cu_c": {
+			Type:     schema.TypeFloat,
+			Computed: true,
+		},
+		"cu_d": {
+			Type:     schema.TypeFloat,
+			Computed: true,
+		},
+		"cu_i": {
+			Type:     schema.TypeFloat,
+			Computed: true,
+		},
+		"cu_m": {
+			Type:     schema.TypeFloat,
+			Computed: true,
+		},
+		"cu_np": {
+			Type:     schema.TypeFloat,
+			Computed: true,
+		},
+		"gpu_units": {
+			Type:     schema.TypeFloat,
+			Computed: true,
+		},
+	}
+
+	return res
+}
+
+func dataSourceRgSchemaMake() map[string]*schema.Schema {
+	res := map[string]*schema.Schema{
+		"rg_id": {
+			Type:     schema.TypeInt,
+			Required: true,
+		},
+		"reason": {
+			Type:     schema.TypeString,
+			Optional: true,
+		},
+
+		"resources": {
+			Type:     schema.TypeList,
+			Computed: true,
+			Elem: &schema.Resource{
+				Schema: resourcesSchemaMake(),
+			},
+		},
+		"account_id": {
+			Type:     schema.TypeInt,
+			Computed: true,
+		},
+		"account_name": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"acl": {
+			Type:     schema.TypeList,
+			Computed: true,
+			Elem: &schema.Resource{
+				Schema: aclSchemaMake(),
+			},
+		},
+		"created_by": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"created_time": {
+			Type:     schema.TypeInt,
+			Computed: true,
+		},
+		"def_net_id": {
+			Type:     schema.TypeInt,
+			Computed: true,
+		},
+		"def_net_type": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"deleted_by": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"deleted_time": {
+			Type:     schema.TypeInt,
+			Computed: true,
+		},
+		"desc": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"dirty": {
+			Type:     schema.TypeBool,
+			Computed: true,
+		},
+		"gid": {
+			Type:     schema.TypeInt,
+			Computed: true,
+		},
+		"guid": {
+			Type:     schema.TypeInt,
+			Computed: true,
+		},
+		"lock_status": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"milestones": {
+			Type:     schema.TypeInt,
+			Computed: true,
+		},
+		"name": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"register_computes": {
+			Type:     schema.TypeBool,
+			Computed: true,
+		},
+		"resource_limits": {
+			Type:     schema.TypeList,
+			Computed: true,
+			Elem: &schema.Resource{
+				Schema: resourceLimitsSchemaMake(),
+			},
+		},
+		"secret": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"status": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"updated_by": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"updated_time": {
+			Type:     schema.TypeInt,
+			Computed: true,
+		},
+		"vins": {
+			Type:     schema.TypeList,
+			Computed: true,
+			Elem: &schema.Schema{
+				Type: schema.TypeInt,
+			},
+		},
+		"computes": {
+			Type:     schema.TypeList,
+			Computed: true,
+			Elem: &schema.Schema{
+				Type: schema.TypeInt,
+			},
+		},
+		"res_types": {
+			Type:     schema.TypeList,
+			Computed: true,
+			Elem: &schema.Schema{
+				Type: schema.TypeString,
+			},
+		},
+		"uniq_pools": {
+			Type:     schema.TypeList,
+			Computed: true,
+			Elem: &schema.Schema{
+				Type: schema.TypeString,
+			},
+		},
+	}
+	return res
 }
 
 func dataSourceResgroupRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
@@ -71,7 +394,9 @@ func dataSourceResgroupRead(ctx context.Context, d *schema.ResourceData, m inter
 		d.SetId("") // ensure ID is empty in this case
 		return diag.FromErr(err)
 	}
-	return diag.FromErr(flattenDataResgroup(d, *rg))
+	d.SetId(strconv.Itoa(d.Get("rg_id").(int)))
+	flattenRg(d, *rg)
+	return nil
 }
 
 func DataSourceResgroup() *schema.Resource {
@@ -85,206 +410,6 @@ func DataSourceResgroup() *schema.Resource {
 			Default: &constants.Timeout60s,
 		},
 
-		Schema: map[string]*schema.Schema{
-			"name": {
-				Type:        schema.TypeString,
-				Optional:    true,
-				Description: "Name of the resource group. Names are case sensitive and unique within the context of an account.",
-			},
-
-			"rg_id": {
-				Type:        schema.TypeInt,
-				Optional:    true,
-				Description: "Unique ID of the resource group. If this ID is specified, then resource group name is ignored.",
-			},
-
-			"account_name": {
-				Type:        schema.TypeString,
-				Computed:    true,
-				Description: "Name of the account, which this resource group belongs to.",
-			},
-
-			"account_id": {
-				Type:        schema.TypeInt,
-				Optional:    true,
-				Description: "Unique ID of the account, which this resource group belongs to.",
-			},
-
-			"description": {
-				Type:        schema.TypeString,
-				Computed:    true,
-				Description: "User-defined text description of this resource group.",
-			},
-			"gid": {
-				Type:        schema.TypeInt,
-				Computed:    true,
-				Description: "Unique ID of the grid, where this resource group is deployed.",
-			},
-			"quota": {
-				Type:     schema.TypeList,
-				Computed: true,
-				Elem: &schema.Resource{
-					Schema: quotaRgSubresourceSchemaMake(), // this is a dictionary
-				},
-				Description: "Quota settings for this resource group.",
-			},
-
-			"def_net_type": {
-				Type:        schema.TypeString,
-				Computed:    true,
-				Description: "Type of the default network for this resource group.",
-			},
-
-			"def_net_id": {
-				Type:        schema.TypeInt,
-				Computed:    true,
-				Description: "ID of the default network for this resource group (if any).",
-			},
-
-			"resources": {
-				Type:     schema.TypeList,
-				Computed: true,
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"current": {
-							Type:     schema.TypeList,
-							Computed: true,
-							Elem: &schema.Resource{
-								Schema: map[string]*schema.Schema{
-									"cpu": {
-										Type:     schema.TypeInt,
-										Computed: true,
-									},
-									"disksize": {
-										Type:     schema.TypeInt,
-										Computed: true,
-									},
-									"extips": {
-										Type:     schema.TypeInt,
-										Computed: true,
-									},
-									"exttraffic": {
-										Type:     schema.TypeInt,
-										Computed: true,
-									},
-									"gpu": {
-										Type:     schema.TypeInt,
-										Computed: true,
-									},
-									"ram": {
-										Type:     schema.TypeInt,
-										Computed: true,
-									},
-									"seps": {
-										Type:     schema.TypeList,
-										Computed: true,
-										Elem: &schema.Resource{
-											Schema: map[string]*schema.Schema{
-												"sep_id": {
-													Type:     schema.TypeString,
-													Computed: true,
-												},
-												"data_name": {
-													Type:     schema.TypeString,
-													Computed: true,
-												},
-												"disk_size": {
-													Type:     schema.TypeFloat,
-													Computed: true,
-												},
-												"disk_size_max": {
-													Type:     schema.TypeInt,
-													Computed: true,
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-						"reserved": {
-							Type:     schema.TypeList,
-							Computed: true,
-							Elem: &schema.Resource{
-								Schema: map[string]*schema.Schema{
-									"cpu": {
-										Type:     schema.TypeInt,
-										Computed: true,
-									},
-									"disksize": {
-										Type:     schema.TypeInt,
-										Computed: true,
-									},
-									"extips": {
-										Type:     schema.TypeInt,
-										Computed: true,
-									},
-									"exttraffic": {
-										Type:     schema.TypeInt,
-										Computed: true,
-									},
-									"gpu": {
-										Type:     schema.TypeInt,
-										Computed: true,
-									},
-									"ram": {
-										Type:     schema.TypeInt,
-										Computed: true,
-									},
-									"seps": {
-										Type:     schema.TypeList,
-										Computed: true,
-										Elem: &schema.Resource{
-											Schema: map[string]*schema.Schema{
-												"sep_id": {
-													Type:     schema.TypeString,
-													Computed: true,
-												},
-												"data_name": {
-													Type:     schema.TypeString,
-													Computed: true,
-												},
-												"disk_size": {
-													Type:     schema.TypeFloat,
-													Computed: true,
-												},
-												"disk_size_max": {
-													Type:     schema.TypeInt,
-													Computed: true,
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-
-			"status": {
-				Type:        schema.TypeString,
-				Computed:    true,
-				Description: "Current status of this resource group.",
-			},
-
-			"vins": {
-				Type:     schema.TypeList, // this is a list of ints
-				Computed: true,
-				Elem: &schema.Schema{
-					Type: schema.TypeInt,
-				},
-				Description: "List of VINs deployed in this resource group.",
-			},
-
-			"vms": {
-				Type:     schema.TypeList, //t his is a list of ints
-				Computed: true,
-				Elem: &schema.Schema{
-					Type: schema.TypeInt,
-				},
-				Description: "List of computes deployed in this resource group.",
-			},
-		},
+		Schema: dataSourceRgSchemaMake(),
 	}
 }

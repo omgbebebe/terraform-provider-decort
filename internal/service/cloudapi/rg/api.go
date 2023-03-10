@@ -32,9 +32,26 @@ Documentation: https://github.com/rudecs/terraform-provider-decort/wiki
 
 package rg
 
-const ResgroupCreateAPI = "/restmachine/cloudapi/rg/create"
-const ResgroupUpdateAPI = "/restmachine/cloudapi/rg/update"
-const ResgroupListAPI = "/restmachine/cloudapi/rg/list"
-const ResgroupGetAPI = "/restmachine/cloudapi/rg/get"
-const ResgroupDeleteAPI = "/restmachine/cloudapi/rg/delete"
-const RgListComputesAPI = "/restmachine/cloudapi/rg/listComputes"
+const (
+	ResgroupCreateAPI          = "/restmachine/cloudapi/rg/create"
+	ResgroupUpdateAPI          = "/restmachine/cloudapi/rg/update"
+	ResgroupListAPI            = "/restmachine/cloudapi/rg/list"
+	ResgroupListDeletedAPI     = "/restmachine/cloudapi/rg/listDeleted"
+	ResgroupListPfwAPI         = "/restmachine/cloudapi/rg/listPFW"
+	ResgroupGetAPI             = "/restmachine/cloudapi/rg/get"
+	ResgroupListVinsAPI        = "/restmachine/cloudapi/rg/listVins"
+	ResgroupListLbAPI          = "/restmachine/cloudapi/rg/listLb"
+	ResgroupDeleteAPI          = "/restmachine/cloudapi/rg/delete"
+	RgListComputesAPI          = "/restmachine/cloudapi/rg/listComputes"
+	RgAffinityGroupComputesAPI = "/restmachine/cloudapi/rg/affinityGroupComputes"
+	RgAffinityGroupsGetAPI     = "/restmachine/cloudapi/rg/affinityGroupsGet"
+	RgAffinityGroupsListAPI    = "/restmachine/cloudapi/rg/affinityGroupsList"
+	RgAuditsAPI                = "/restmachine/cloudapi/rg/audits"
+	RgEnableAPI                = "/restmachine/cloudapi/rg/enable"
+	RgDisableAPI               = "/restmachine/cloudapi/rg/disable"
+	ResgroupUsageAPI           = "/restmachine/cloudapi/rg/usage"
+	RgAccessGrantAPI           = "/restmachine/cloudapi/rg/accessGrant"
+	RgAccessRevokeAPI          = "/restmachine/cloudapi/rg/accessRevoke"
+	RgSetDefNetAPI             = "/restmachine/cloudapi/rg/setDefNet"
+	RgRestoreAPI               = "/restmachine/cloudapi/rg/restore"
+)

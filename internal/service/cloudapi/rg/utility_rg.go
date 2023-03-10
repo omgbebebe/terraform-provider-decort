@@ -45,7 +45,7 @@ import (
 
 // On success this function returns a string, as returned by API rg/get, which could be unmarshalled
 // into ResgroupGetResp structure
-func utilityResgroupCheckPresence(ctx context.Context, d *schema.ResourceData, m interface{}) (*ResgroupGetResp, error) {
+func utilityResgroupCheckPresence(ctx context.Context, d *schema.ResourceData, m interface{}) (*RecordResourceGroup, error) {
 	// This function tries to locate resource group by one of the following algorithms depending
 	// on the parameters passed:
 	//    - if resource group ID is specified -> by RG ID
@@ -71,8 +71,34 @@ func utilityResgroupCheckPresence(ctx context.Context, d *schema.ResourceData, m
 	} else {
 		urlValues.Add("rgId", strconv.Itoa(d.Get("rg_id").(int)))
 	}
+	if reason, ok := d.GetOk("reason"); ok {
+		urlValues.Add("reason", reason.(string))
+	}
 
-	rgData := &ResgroupGetResp{}
+	rgData := &RecordResourceGroup{}
+	rgRaw, err := c.DecortAPICall(ctx, "POST", ResgroupGetAPI, urlValues)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal([]byte(rgRaw), rgData)
+	if err != nil {
+		return nil, err
+	}
+	return rgData, nil
+}
+
+func utilityDataResgroupCheckPresence(ctx context.Context, d *schema.ResourceData, m interface{}) (*RecordResourceGroup, error) {
+	c := m.(*controller.ControllerCfg)
+	urlValues := &url.Values{}
+	rgData := &RecordResourceGroup{}
+
+	urlValues.Add("rgId", strconv.Itoa(d.Get("rg_id").(int)))
+
+	if reason, ok := d.GetOk("reason"); ok {
+		urlValues.Add("reason", reason.(string))
+	}
+
 	rgRaw, err := c.DecortAPICall(ctx, "POST", ResgroupGetAPI, urlValues)
 	if err != nil {
 		return nil, err

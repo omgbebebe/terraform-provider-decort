@@ -41,73 +41,6 @@ import (
 	"github.com/rudecs/terraform-provider-decort/internal/constants"
 )
 
-func flattenRgList(rgl ResgroupListResp) []map[string]interface{} {
-	res := make([]map[string]interface{}, 0)
-	for _, rg := range rgl {
-		temp := map[string]interface{}{
-			"account_id":        rg.AccountID,
-			"account_name":      rg.AccountName,
-			"acl":               flattenRgAcl(rg.ACLs),
-			"created_by":        rg.CreatedBy,
-			"created_time":      rg.CreatedTime,
-			"def_net_id":        rg.DefaultNetID,
-			"def_net_type":      rg.DefaultNetType,
-			"deleted_by":        rg.DeletedBy,
-			"deleted_time":      rg.DeletedTime,
-			"desc":              rg.Decsription,
-			"gid":               rg.GridID,
-			"guid":              rg.GUID,
-			"rg_id":             rg.ID,
-			"lock_status":       rg.LockStatus,
-			"milestones":        rg.Milestones,
-			"name":              rg.Name,
-			"register_computes": rg.RegisterComputes,
-			"resource_limits":   flattenRgResourceLimits(rg.ResourceLimits),
-			"secret":            rg.Secret,
-			"status":            rg.Status,
-			"updated_by":        rg.UpdatedBy,
-			"updated_time":      rg.UpdatedTime,
-			"vins":              rg.Vins,
-			"vms":               rg.Computes,
-		}
-		res = append(res, temp)
-	}
-	return res
-
-}
-
-func flattenRgAcl(rgAcls []AccountAclRecord) []map[string]interface{} {
-	res := make([]map[string]interface{}, 0)
-	for _, rgAcl := range rgAcls {
-		temp := map[string]interface{}{
-			"explicit":      rgAcl.IsExplicit,
-			"guid":          rgAcl.Guid,
-			"right":         rgAcl.Rights,
-			"status":        rgAcl.Status,
-			"type":          rgAcl.Type,
-			"user_group_id": rgAcl.UgroupID,
-		}
-		res = append(res, temp)
-	}
-	return res
-}
-
-func flattenRgResourceLimits(rl ResourceLimits) []map[string]interface{} {
-	res := make([]map[string]interface{}, 0)
-	temp := map[string]interface{}{
-		"cu_c":      rl.CUC,
-		"cu_d":      rl.CUD,
-		"cu_i":      rl.CUI,
-		"cu_m":      rl.CUM,
-		"cu_np":     rl.CUNP,
-		"gpu_units": rl.GpuUnits,
-	}
-	res = append(res, temp)
-
-	return res
-
-}
-
 func dataSourceRgListRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	rgList, err := utilityRgListCheckPresence(ctx, d, m)
 	if err != nil {
@@ -139,11 +72,19 @@ func dataSourceRgListSchemaMake() map[string]*schema.Schema {
 			Optional:    true,
 			Description: "Page size",
 		},
+
 		"items": {
 			Type:     schema.TypeList,
 			Computed: true,
 			Elem: &schema.Resource{
 				Schema: map[string]*schema.Schema{
+					"account_acl": {
+						Type:     schema.TypeList,
+						Computed: true,
+						Elem: &schema.Resource{
+							Schema: aclSchemaMake(),
+						},
+					},
 					"account_id": {
 						Type:     schema.TypeInt,
 						Computed: true,
@@ -156,32 +97,7 @@ func dataSourceRgListSchemaMake() map[string]*schema.Schema {
 						Type:     schema.TypeList,
 						Computed: true,
 						Elem: &schema.Resource{
-							Schema: map[string]*schema.Schema{
-								"explicit": {
-									Type:     schema.TypeBool,
-									Computed: true,
-								},
-								"guid": {
-									Type:     schema.TypeString,
-									Computed: true,
-								},
-								"right": {
-									Type:     schema.TypeString,
-									Computed: true,
-								},
-								"status": {
-									Type:     schema.TypeString,
-									Computed: true,
-								},
-								"type": {
-									Type:     schema.TypeString,
-									Computed: true,
-								},
-								"user_group_id": {
-									Type:     schema.TypeString,
-									Computed: true,
-								},
-							},
+							Schema: aclSchemaMake(),
 						},
 					},
 					"created_by": {
@@ -210,6 +126,10 @@ func dataSourceRgListSchemaMake() map[string]*schema.Schema {
 					},
 					"desc": {
 						Type:     schema.TypeString,
+						Computed: true,
+					},
+					"dirty": {
+						Type:     schema.TypeBool,
 						Computed: true,
 					},
 					"gid": {
@@ -244,32 +164,7 @@ func dataSourceRgListSchemaMake() map[string]*schema.Schema {
 						Type:     schema.TypeList,
 						Computed: true,
 						Elem: &schema.Resource{
-							Schema: map[string]*schema.Schema{
-								"cu_c": {
-									Type:     schema.TypeFloat,
-									Computed: true,
-								},
-								"cu_d": {
-									Type:     schema.TypeFloat,
-									Computed: true,
-								},
-								"cu_i": {
-									Type:     schema.TypeFloat,
-									Computed: true,
-								},
-								"cu_m": {
-									Type:     schema.TypeFloat,
-									Computed: true,
-								},
-								"cu_np": {
-									Type:     schema.TypeFloat,
-									Computed: true,
-								},
-								"gpu_units": {
-									Type:     schema.TypeFloat,
-									Computed: true,
-								},
-							},
+							Schema: resourceLimitsSchemaMake(),
 						},
 					},
 					"secret": {
@@ -300,6 +195,20 @@ func dataSourceRgListSchemaMake() map[string]*schema.Schema {
 						Computed: true,
 						Elem: &schema.Schema{
 							Type: schema.TypeInt,
+						},
+					},
+					"resource_types": {
+						Type:     schema.TypeList,
+						Computed: true,
+						Elem: &schema.Schema{
+							Type: schema.TypeString,
+						},
+					},
+					"uniq_pools": {
+						Type:     schema.TypeList,
+						Computed: true,
+						Elem: &schema.Schema{
+							Type: schema.TypeString,
 						},
 					},
 				},

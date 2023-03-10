@@ -38,13 +38,13 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
 
-func parseOsUsers(logins []OsUserRecord) []interface{} {
+func parseOsUsers(logins ListOSUser) []interface{} {
 	var result = make([]interface{}, len(logins))
 
 	for index, value := range logins {
 		elem := make(map[string]interface{})
 
-		elem["guid"] = value.Guid
+		elem["guid"] = value.GUID
 		elem["login"] = value.Login
 		elem["password"] = value.Password
 		elem["public_key"] = value.PubKey
@@ -70,9 +70,9 @@ func osUsersSubresourceSchemaMake() map[string]*schema.Schema {
 		},
 
 		"password": {
-			Type:        schema.TypeString,
-			Computed:    true,
-			Sensitive:   true,
+			Type:     schema.TypeString,
+			Computed: true,
+			//Sensitive:   true,
 			Description: "Password of this guest OS user.",
 		},
 

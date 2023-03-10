@@ -44,11 +44,11 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
 
-func utilityRgListCheckPresence(ctx context.Context, d *schema.ResourceData, m interface{}) (ResgroupListResp, error) {
+func utilityRgListCheckPresence(ctx context.Context, d *schema.ResourceData, m interface{}) (ListResourceGroups, error) {
 	c := m.(*controller.ControllerCfg)
 	urlValues := &url.Values{}
 
-	rgList := ResgroupListResp{}
+	rgList := ListResourceGroups{}
 
 	if size, ok := d.GetOk("size"); ok {
 		urlValues.Add("size", strconv.Itoa(size.(int)))

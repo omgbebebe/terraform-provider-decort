@@ -34,13 +34,13 @@ package kvmvm
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"strconv"
 
 	"github.com/rudecs/terraform-provider-decort/internal/constants"
 	"github.com/rudecs/terraform-provider-decort/internal/controller"
+	"github.com/rudecs/terraform-provider-decort/internal/dc"
 	"github.com/rudecs/terraform-provider-decort/internal/statefuncs"
 	"github.com/rudecs/terraform-provider-decort/internal/status"
 	log "github.com/sirupsen/logrus"
@@ -50,34 +50,35 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 )
 
-func cloudInitDiffSupperss(key, oldVal, newVal string, d *schema.ResourceData) bool {
-	if oldVal == "" && newVal != "applied" {
-		// if old value for "cloud_init" resource is empty string, it means that we are creating new compute
-		// and there is a chance that the user will want custom cloud init parameters - so we check if
-		// cloud_init is explicitly set in TF file by making sure that its new value is different from "applied",
-		// which is a reserved key word.
-		log.Debugf("cloudInitDiffSupperss: key=%s, oldVal=%q, newVal=%q -> suppress=FALSE", key, oldVal, newVal)
-		return false // there is a difference between stored and new value
-	}
-	log.Debugf("cloudInitDiffSupperss: key=%s, oldVal=%q, newVal=%q -> suppress=TRUE", key, oldVal, newVal)
-	return true // suppress difference
-}
-
 func resourceComputeCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	// we assume all mandatory parameters it takes to create a comptue instance are properly
 	// specified - we rely on schema "Required" attributes to let Terraform validate them for us
 
 	log.Debugf("resourceComputeCreate: called for Compute name %q, RG ID %d", d.Get("name").(string), d.Get("rg_id").(int))
+	c := m.(*controller.ControllerCfg)
+	urlValues := &url.Values{}
+
+	if !existRgID(ctx, d, m) {
+		return diag.Errorf("resourceComputeCreate: can't create Compute bacause rgID %d not allowed or does not exist", d.Get("rg_id").(int))
+	}
+
+	if !existImageId(ctx, d, m) {
+		return diag.Errorf("resourceComputeCreate: can't create Compute bacause imageID %d not allowed or does not exist", d.Get("image_id").(int))
+	}
+
+	if _, ok := d.GetOk("network"); ok {
+		if vinsId, ok := existVinsId(ctx, d, m); !ok {
+			return diag.Errorf("resourceResgroupCreate: can't create RG bacause vins ID %d not allowed or does not exist", vinsId)
+		}
+	}
 
 	// create basic Compute (i.e. without extra disks and network connections - those will be attached
 	// by subsequent individual API calls).
-	c := m.(*controller.ControllerCfg)
-	urlValues := &url.Values{}
-	urlValues.Add("rgId", fmt.Sprintf("%d", d.Get("rg_id").(int)))
+	urlValues.Add("rgId", strconv.Itoa(d.Get("rg_id").(int)))
 	urlValues.Add("name", d.Get("name").(string))
-	urlValues.Add("cpu", fmt.Sprintf("%d", d.Get("cpu").(int)))
-	urlValues.Add("ram", fmt.Sprintf("%d", d.Get("ram").(int)))
-	urlValues.Add("imageId", fmt.Sprintf("%d", d.Get("image_id").(int)))
+	urlValues.Add("cpu", strconv.Itoa(d.Get("cpu").(int)))
+	urlValues.Add("ram", strconv.Itoa(d.Get("ram").(int)))
+	urlValues.Add("imageId", strconv.Itoa(d.Get("image_id").(int)))
 	urlValues.Add("netType", "NONE")
 	urlValues.Add("start", "0") // at the 1st step create compute in a stopped state
 
@@ -156,6 +157,8 @@ func resourceComputeCreate(ctx context.Context, d *schema.ResourceData, m interf
 	d.SetId(apiResp) // update ID of the resource to tell Terraform that the resource exists, albeit partially
 	compId, _ := strconv.Atoi(apiResp)
 
+	warnings := dc.Warnings{}
+
 	cleanup := false
 	defer func() {
 		if cleanup {
@@ -174,10 +177,8 @@ func resourceComputeCreate(ctx context.Context, d *schema.ResourceData, m interf
 
 	log.Debugf("resourceComputeCreate: new simple Compute ID %d, name %s created", compId, d.Get("name").(string))
 
-	// Configure data disks if any
 	argVal, argSet = d.GetOk("extra_disks")
 	if argSet && argVal.(*schema.Set).Len() > 0 {
-		// urlValues.Add("desc", argVal.(string))
 		log.Debugf("resourceComputeCreate: calling utilityComputeExtraDisksConfigure to attach %d extra disk(s)", argVal.(*schema.Set).Len())
 		err = utilityComputeExtraDisksConfigure(ctx, d, m, false) // do_delta=false, as we are working on a new compute
 		if err != nil {
@@ -186,11 +187,10 @@ func resourceComputeCreate(ctx context.Context, d *schema.ResourceData, m interf
 			return diag.FromErr(err)
 		}
 	}
-	// Configure external networks if any
 	argVal, argSet = d.GetOk("network")
 	if argSet && argVal.(*schema.Set).Len() > 0 {
 		log.Debugf("resourceComputeCreate: calling utilityComputeNetworksConfigure to attach %d network(s)", argVal.(*schema.Set).Len())
-		err = utilityComputeNetworksConfigure(ctx, d, m, false, true) // do_delta=false, as we are working on a new compute
+		err = utilityComputeNetworksConfigure(ctx, d, m, false, true)
 		if err != nil {
 			log.Errorf("resourceComputeCreate: error when attaching networks to a new Compute ID %d: %s", compId, err)
 			cleanup = true
@@ -205,8 +205,7 @@ func resourceComputeCreate(ctx context.Context, d *schema.ResourceData, m interf
 		reqValues.Add("computeId", fmt.Sprintf("%d", compId))
 		log.Debugf("resourceComputeCreate: starting Compute ID %d after completing its resource configuration", compId)
 		if _, err := c.DecortAPICall(ctx, "POST", ComputeStartAPI, reqValues); err != nil {
-			cleanup = true
-			return diag.FromErr(err)
+			warnings.Add(err)
 		}
 	}
 
@@ -219,7 +218,7 @@ func resourceComputeCreate(ctx context.Context, d *schema.ResourceData, m interf
 		urlValues.Add("computeId", fmt.Sprintf("%d", compId))
 		log.Debugf("resourceComputeCreate: enable=%t Compute ID %d after completing its resource configuration", compId, enabled)
 		if _, err := c.DecortAPICall(ctx, "POST", api, urlValues); err != nil {
-			return diag.FromErr(err)
+			warnings.Add(err)
 		}
 
 	}
@@ -232,7 +231,7 @@ func resourceComputeCreate(ctx context.Context, d *schema.ResourceData, m interf
 			urlValues.Add("affinityLabel", affinityLabel)
 			_, err := c.DecortAPICall(ctx, "POST", ComputeAffinityLabelSetAPI, urlValues)
 			if err != nil {
-				return diag.FromErr(err)
+				warnings.Add(err)
 			}
 			urlValues = &url.Values{}
 		}
@@ -287,8 +286,7 @@ func resourceComputeCreate(ctx context.Context, d *schema.ResourceData, m interf
 					urlValues.Add("value", arConv["value"].(string))
 					_, err := c.DecortAPICall(ctx, "POST", ComputeAffinityRuleAddAPI, urlValues)
 					if err != nil {
-						cleanup = true
-						return diag.FromErr(err)
+						warnings.Add(err)
 					}
 					urlValues = &url.Values{}
 				}
@@ -310,12 +308,121 @@ func resourceComputeCreate(ctx context.Context, d *schema.ResourceData, m interf
 					urlValues.Add("value", arConv["value"].(string))
 					_, err := c.DecortAPICall(ctx, "POST", ComputeAntiAffinityRuleAddAPI, urlValues)
 					if err != nil {
-						cleanup = true
-						return diag.FromErr(err)
+						warnings.Add(err)
 					}
 					urlValues = &url.Values{}
 				}
 			}
+		}
+	}
+
+	if tags, ok := d.GetOk("tags"); ok {
+		log.Debugf("resourceComputeCreate: Create tags on ComputeID: %d", compId)
+		addedTags := tags.(*schema.Set).List()
+		if len(addedTags) > 0 {
+			for _, tagInterface := range addedTags {
+				urlValues = &url.Values{}
+				tagItem := tagInterface.(map[string]interface{})
+
+				urlValues.Add("computeId", d.Id())
+				urlValues.Add("key", tagItem["key"].(string))
+				urlValues.Add("value", tagItem["value"].(string))
+				_, err := c.DecortAPICall(ctx, "POST", ComputeTagAddAPI, urlValues)
+				if err != nil {
+					warnings.Add(err)
+				}
+			}
+		}
+	}
+
+	if pfws, ok := d.GetOk("port_forwarding"); ok {
+		log.Debugf("resourceComputeCreate: Create port farwarding on ComputeID: %d", compId)
+		addedPfws := pfws.(*schema.Set).List()
+		if len(addedPfws) > 0 {
+			for _, pfwInterface := range addedPfws {
+				urlValues = &url.Values{}
+				pfwItem := pfwInterface.(map[string]interface{})
+
+				urlValues.Add("computeId", d.Id())
+				urlValues.Add("publicPortStart", strconv.Itoa(pfwItem["public_port_start"].(int)))
+				urlValues.Add("publicPortEnd", strconv.Itoa(pfwItem["public_port_end"].(int)))
+				urlValues.Add("localBasePort", strconv.Itoa(pfwItem["local_port"].(int)))
+				urlValues.Add("proto", pfwItem["proto"].(string))
+				_, err := c.DecortAPICall(ctx, "POST", ComputePfwAddAPI, urlValues)
+				if err != nil {
+					warnings.Add(err)
+				}
+			}
+		}
+	}
+	if userAcess, ok := d.GetOk("user_access"); ok {
+		log.Debugf("resourceComputeCreate: Create user access on ComputeID: %d", compId)
+		usersAcess := userAcess.(*schema.Set).List()
+		if len(usersAcess) > 0 {
+			for _, userAcessInterface := range usersAcess {
+				urlValues = &url.Values{}
+				userAccessItem := userAcessInterface.(map[string]interface{})
+
+				urlValues.Add("computeId", d.Id())
+				urlValues.Add("userName", userAccessItem["username"].(string))
+				urlValues.Add("accesstype", userAccessItem["access_type"].(string))
+				_, err := c.DecortAPICall(ctx, "POST", ComputeUserGrantAPI, urlValues)
+				if err != nil {
+					warnings.Add(err)
+				}
+			}
+		}
+	}
+
+	if snapshotList, ok := d.GetOk("snapshot"); ok {
+		log.Debugf("resourceComputeCreate: Create snapshot on ComputeID: %d", compId)
+		snapshots := snapshotList.(*schema.Set).List()
+		if len(snapshots) > 0 {
+			for _, snapshotInterface := range snapshots {
+				urlValues = &url.Values{}
+				snapshotItem := snapshotInterface.(map[string]interface{})
+
+				urlValues.Add("computeId", d.Id())
+				urlValues.Add("userName", snapshotItem["label"].(string))
+				_, err := c.DecortAPICall(ctx, "POST", ComputeSnapshotCreateAPI, urlValues)
+				if err != nil {
+					warnings.Add(err)
+				}
+			}
+		}
+	}
+
+	if cdtList, ok := d.GetOk("cd"); ok {
+		log.Debugf("resourceComputeCreate: Create cd on ComputeID: %d", compId)
+		cds := cdtList.(*schema.Set).List()
+		if len(cds) > 0 {
+			urlValues = &url.Values{}
+			snapshotItem := cds[0].(map[string]interface{})
+
+			urlValues.Add("computeId", d.Id())
+			urlValues.Add("cdromId", strconv.Itoa(snapshotItem["cdrom_id"].(int)))
+			_, err := c.DecortAPICall(ctx, "POST", ComputeCdInsertAPI, urlValues)
+			if err != nil {
+				warnings.Add(err)
+			}
+		}
+	}
+
+	if d.Get("pin_to_stack").(bool) == true {
+		urlValues := &url.Values{}
+		urlValues.Add("computeId", d.Id())
+		_, err := c.DecortAPICall(ctx, "POST", ComputePinToStackAPI, urlValues)
+		if err != nil {
+			warnings.Add(err)
+		}
+	}
+
+	if d.Get("pause").(bool) == true {
+		urlValues := &url.Values{}
+		urlValues.Add("computeId", d.Id())
+		_, err := c.DecortAPICall(ctx, "POST", ComputePauseAPI, urlValues)
+		if err != nil {
+			warnings.Add(err)
 		}
 	}
 
@@ -325,7 +432,8 @@ func resourceComputeCreate(ctx context.Context, d *schema.ResourceData, m interf
 	// between Compute resource and Compute data source schemas
 	// Compute read function will also update resource ID on success, so that Terraform
 	// will know the resource exists
-	return resourceComputeRead(ctx, d, m)
+	defer resourceComputeRead(ctx, d, m)
+	return warnings.Get()
 }
 
 func resourceComputeRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
@@ -334,19 +442,7 @@ func resourceComputeRead(ctx context.Context, d *schema.ResourceData, m interfac
 
 	c := m.(*controller.ControllerCfg)
 
-	compFacts, err := utilityComputeCheckPresence(ctx, d, m)
-	if compFacts == "" {
-		if err != nil {
-			return diag.FromErr(err)
-		}
-		// Compute with such name and RG ID was not found
-		return nil
-	}
-
-	compute := &ComputeGetResp{}
-	err = json.Unmarshal([]byte(compFacts), compute)
-
-	log.Debugf("resourceComputeRead: compute is: %+v", compute)
+	compute, err := utilityComputeCheckPresence(ctx, d, m)
 	if err != nil {
 		return diag.FromErr(err)
 	}
@@ -376,17 +472,12 @@ func resourceComputeRead(ctx context.Context, d *schema.ResourceData, m interfac
 		return diag.Errorf("The compute is in status: %s, please, contant the support for more information", compute.Status)
 	}
 
-	compFacts, err = utilityComputeCheckPresence(ctx, d, m)
-	log.Debugf("resourceComputeRead: after changes compute is: %s", compFacts)
-	if compFacts == "" {
-		if err != nil {
-			return diag.FromErr(err)
-		}
-		// Compute with such name and RG ID was not found
-		return nil
+	compute, err = utilityComputeCheckPresence(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
 	}
 
-	if err = flattenCompute(d, compFacts); err != nil {
+	if err = flattenCompute(d, compute); err != nil {
 		return diag.FromErr(err)
 	}
 
@@ -401,13 +492,23 @@ func resourceComputeUpdate(ctx context.Context, d *schema.ResourceData, m interf
 		d.Id(), d.Get("name").(string), d.Get("rg_id").(int))
 
 	c := m.(*controller.ControllerCfg)
+	urlValues := &url.Values{}
 
-	computeRaw, err := utilityComputeCheckPresence(ctx, d, m)
-	if err != nil {
-		return diag.FromErr(err)
+	if !existRgID(ctx, d, m) {
+		return diag.Errorf("resourceComputeUpdate: can't update Compute bacause rgID %d not allowed or does not exist", d.Get("rg_id").(int))
 	}
-	compute := &ComputeGetResp{}
-	err = json.Unmarshal([]byte(computeRaw), compute)
+
+	if !existImageId(ctx, d, m) {
+		return diag.Errorf("resourceComputeUpdate: can't update Compute bacause imageID %d not allowed or does not exist", d.Get("image_id").(int))
+	}
+
+	if _, ok := d.GetOk("network"); ok {
+		if vinsId, ok := existVinsId(ctx, d, m); !ok {
+			return diag.Errorf("resourceResgroupUpdate: can't update RG bacause vinsID %d not allowed or does not exist", vinsId)
+		}
+	}
+
+	compute, err := utilityComputeCheckPresence(ctx, d, m)
 	if err != nil {
 		return diag.FromErr(err)
 	}
@@ -461,7 +562,7 @@ func resourceComputeUpdate(ctx context.Context, d *schema.ResourceData, m interf
 	*/
 
 	// 1. Resize CPU/RAM
-	urlValues := &url.Values{}
+	urlValues = &url.Values{}
 	doUpdate := false
 	urlValues.Add("computeId", d.Id())
 
@@ -495,12 +596,20 @@ func resourceComputeUpdate(ctx context.Context, d *schema.ResourceData, m interf
 	// 2. Resize (grow) Boot disk
 	oldSize, newSize := d.GetChange("boot_disk_size")
 	if oldSize.(int) < newSize.(int) {
-		bdsParams := &url.Values{}
-		bdsParams.Add("diskId", fmt.Sprintf("%d", d.Get("boot_disk_id").(int)))
-		bdsParams.Add("size", fmt.Sprintf("%d", newSize.(int)))
+		urlValues := &url.Values{}
+		if diskId, ok := d.GetOk("boot_disk_id"); ok {
+			urlValues.Add("diskId", strconv.Itoa(diskId.(int)))
+		} else {
+			bootDisk, err := utilityComputeBootDiskCheckPresence(ctx, d, m)
+			if err != nil {
+				return diag.FromErr(err)
+			}
+			urlValues.Add("diskId", strconv.FormatUint(bootDisk.ID, 10))
+		}
+		urlValues.Add("size", strconv.Itoa(newSize.(int)))
 		log.Debugf("resourceComputeUpdate: compute ID %s, boot disk ID %d resize %d -> %d",
 			d.Id(), d.Get("boot_disk_id").(int), oldSize.(int), newSize.(int))
-		_, err := c.DecortAPICall(ctx, "POST", DisksResizeAPI, bdsParams)
+		_, err := c.DecortAPICall(ctx, "POST", DisksResizeAPI, urlValues)
 		if err != nil {
 			return diag.FromErr(err)
 		}
@@ -529,20 +638,6 @@ func resourceComputeUpdate(ctx context.Context, d *schema.ResourceData, m interf
 		updateParams.Add("desc", d.Get("description").(string))
 		if _, err := c.DecortAPICall(ctx, "POST", ComputeUpdateAPI, updateParams); err != nil {
 			return diag.FromErr(err)
-		}
-	}
-
-	if d.HasChange("started") {
-		params := &url.Values{}
-		params.Add("computeId", d.Id())
-		if d.Get("started").(bool) {
-			if _, err := c.DecortAPICall(ctx, "POST", ComputeStartAPI, params); err != nil {
-				return diag.FromErr(err)
-			}
-		} else {
-			if _, err := c.DecortAPICall(ctx, "POST", ComputeStopAPI, params); err != nil {
-				return diag.FromErr(err)
-			}
 		}
 	}
 
@@ -630,6 +725,20 @@ func resourceComputeUpdate(ctx context.Context, d *schema.ResourceData, m interf
 				}
 
 				urlValues = &url.Values{}
+			}
+		}
+	}
+
+	if d.HasChange("started") {
+		params := &url.Values{}
+		params.Add("computeId", d.Id())
+		if d.Get("started").(bool) {
+			if _, err := c.DecortAPICall(ctx, "POST", ComputeStartAPI, params); err != nil {
+				return diag.FromErr(err)
+			}
+		} else {
+			if _, err := c.DecortAPICall(ctx, "POST", ComputeStopAPI, params); err != nil {
+				return diag.FromErr(err)
 			}
 		}
 	}
@@ -783,6 +892,285 @@ func resourceComputeUpdate(ctx context.Context, d *schema.ResourceData, m interf
 
 	}
 
+	if d.HasChange("tags") {
+		oldSet, newSet := d.GetChange("tags")
+		deletedTags := (oldSet.(*schema.Set).Difference(newSet.(*schema.Set))).List()
+		if len(deletedTags) > 0 {
+			for _, tagInterface := range deletedTags {
+				urlValues := &url.Values{}
+				tagItem := tagInterface.(map[string]interface{})
+
+				urlValues.Add("computeId", d.Id())
+				urlValues.Add("key", tagItem["key"].(string))
+				_, err := c.DecortAPICall(ctx, "POST", ComputeTagRemoveAPI, urlValues)
+				if err != nil {
+					return diag.FromErr(err)
+				}
+			}
+		}
+
+		addedTags := (newSet.(*schema.Set).Difference(oldSet.(*schema.Set))).List()
+		if len(addedTags) > 0 {
+			for _, tagInterface := range addedTags {
+				urlValues := &url.Values{}
+				tagItem := tagInterface.(map[string]interface{})
+
+				urlValues.Add("computeId", d.Id())
+				urlValues.Add("key", tagItem["key"].(string))
+				urlValues.Add("value", tagItem["value"].(string))
+				_, err := c.DecortAPICall(ctx, "POST", ComputeTagAddAPI, urlValues)
+				if err != nil {
+					return diag.FromErr(err)
+				}
+			}
+		}
+	}
+
+	if d.HasChange("port_forwarding") {
+		oldSet, newSet := d.GetChange("port_forwarding")
+		deletedPfws := (oldSet.(*schema.Set).Difference(newSet.(*schema.Set))).List()
+		if len(deletedPfws) > 0 {
+			for _, pfwInterface := range deletedPfws {
+				urlValues := &url.Values{}
+				pfwItem := pfwInterface.(map[string]interface{})
+
+				urlValues.Add("computeId", d.Id())
+				urlValues.Add("publicPortStart", strconv.Itoa(pfwItem["public_port_start"].(int)))
+				if pfwItem["public_port_end"].(int) == -1 {
+					urlValues.Add("publicPortEnd", strconv.Itoa(pfwItem["public_port_start"].(int)))
+				} else {
+					urlValues.Add("publicPortEnd", strconv.Itoa(pfwItem["public_port_end"].(int)))
+				}
+				urlValues.Add("localBasePort", strconv.Itoa(pfwItem["local_port"].(int)))
+				urlValues.Add("proto", pfwItem["proto"].(string))
+				_, err := c.DecortAPICall(ctx, "POST", ComputePfwDelAPI, urlValues)
+				if err != nil {
+					return diag.FromErr(err)
+				}
+			}
+		}
+
+		addedPfws := (newSet.(*schema.Set).Difference(oldSet.(*schema.Set))).List()
+		if len(addedPfws) > 0 {
+			for _, pfwInterface := range addedPfws {
+				urlValues := &url.Values{}
+				pfwItem := pfwInterface.(map[string]interface{})
+
+				urlValues.Add("computeId", d.Id())
+				urlValues.Add("publicPortStart", strconv.Itoa(pfwItem["public_port_start"].(int)))
+				urlValues.Add("publicPortEnd", strconv.Itoa(pfwItem["public_port_end"].(int)))
+				urlValues.Add("localBasePort", strconv.Itoa(pfwItem["local_port"].(int)))
+				urlValues.Add("proto", pfwItem["proto"].(string))
+				_, err := c.DecortAPICall(ctx, "POST", ComputePfwAddAPI, urlValues)
+				if err != nil {
+					return diag.FromErr(err)
+				}
+			}
+		}
+	}
+
+	if d.HasChange("user_access") {
+		oldSet, newSet := d.GetChange("user_access")
+		deletedUserAcess := (oldSet.(*schema.Set).Difference(newSet.(*schema.Set))).List()
+		if len(deletedUserAcess) > 0 {
+			for _, userAcessInterface := range deletedUserAcess {
+				urlValues := &url.Values{}
+				userAccessItem := userAcessInterface.(map[string]interface{})
+
+				urlValues.Add("computeId", d.Id())
+				urlValues.Add("userName", userAccessItem["username"].(string))
+				_, err := c.DecortAPICall(ctx, "POST", ComputeUserRevokeAPI, urlValues)
+				if err != nil {
+					return diag.FromErr(err)
+				}
+			}
+		}
+
+		addedUserAccess := (newSet.(*schema.Set).Difference(oldSet.(*schema.Set))).List()
+		if len(addedUserAccess) > 0 {
+			for _, userAccessInterface := range addedUserAccess {
+				urlValues := &url.Values{}
+				userAccessItem := userAccessInterface.(map[string]interface{})
+
+				urlValues.Add("computeId", d.Id())
+				urlValues.Add("userName", userAccessItem["username"].(string))
+				urlValues.Add("accesstype", userAccessItem["access_type"].(string))
+				_, err := c.DecortAPICall(ctx, "POST", ComputeUserGrantAPI, urlValues)
+				if err != nil {
+					return diag.FromErr(err)
+				}
+			}
+		}
+	}
+
+	if d.HasChange("snapshot") {
+		oldSet, newSet := d.GetChange("snapshot")
+		deletedSnapshots := (oldSet.(*schema.Set).Difference(newSet.(*schema.Set))).List()
+		if len(deletedSnapshots) > 0 {
+			for _, snapshotInterface := range deletedSnapshots {
+				urlValues := &url.Values{}
+				snapshotItem := snapshotInterface.(map[string]interface{})
+
+				urlValues.Add("computeId", d.Id())
+				urlValues.Add("label", snapshotItem["label"].(string))
+				_, err := c.DecortAPICall(ctx, "POST", ComputeSnapshotDeleteAPI, urlValues)
+				if err != nil {
+					return diag.FromErr(err)
+				}
+			}
+		}
+
+		addedSnapshots := (newSet.(*schema.Set).Difference(oldSet.(*schema.Set))).List()
+		if len(addedSnapshots) > 0 {
+			for _, snapshotInterface := range addedSnapshots {
+				urlValues := &url.Values{}
+				snapshotItem := snapshotInterface.(map[string]interface{})
+
+				urlValues.Add("computeId", d.Id())
+				urlValues.Add("label", snapshotItem["label"].(string))
+				_, err := c.DecortAPICall(ctx, "POST", ComputeSnapshotCreateAPI, urlValues)
+				if err != nil {
+					return diag.FromErr(err)
+				}
+			}
+		}
+	}
+
+	if d.HasChange("rollback") {
+		if rollback, ok := d.GetOk("rollback"); ok {
+			urlValues := &url.Values{}
+
+			//Compute must be stopped before rollback
+			urlValues.Add("computeId", d.Id())
+			urlValues.Add("force", "false")
+			_, err := c.DecortAPICall(ctx, "POST", ComputeStopAPI, urlValues)
+			if err != nil {
+				return diag.FromErr(err)
+			}
+
+			urlValues = &url.Values{}
+			rollbackInterface := rollback.(*schema.Set).List()[0]
+			rollbackItem := rollbackInterface.(map[string]interface{})
+
+			urlValues.Add("computeId", d.Id())
+			urlValues.Add("label", rollbackItem["label"].(string))
+			_, err = c.DecortAPICall(ctx, "POST", ComputeSnapshotRollbackAPI, urlValues)
+			if err != nil {
+				return diag.FromErr(err)
+			}
+		}
+	}
+
+	if d.HasChange("cd") {
+		oldSet, newSet := d.GetChange("cd")
+		deletedCd := (oldSet.(*schema.Set).Difference(newSet.(*schema.Set))).List()
+		if len(deletedCd) > 0 {
+			urlValues := &url.Values{}
+
+			urlValues.Add("computeId", d.Id())
+			_, err := c.DecortAPICall(ctx, "POST", ComputeCdEjectAPI, urlValues)
+			if err != nil {
+				return diag.FromErr(err)
+			}
+		}
+
+		addedCd := (newSet.(*schema.Set).Difference(oldSet.(*schema.Set))).List()
+		if len(addedCd) > 0 {
+			urlValues := &url.Values{}
+			cdItem := addedCd[0].(map[string]interface{})
+
+			urlValues.Add("computeId", d.Id())
+			urlValues.Add("cdromId", strconv.Itoa(cdItem["cdrom_id"].(int)))
+			_, err := c.DecortAPICall(ctx, "POST", ComputeCdInsertAPI, urlValues)
+			if err != nil {
+				return diag.FromErr(err)
+			}
+		}
+	}
+
+	if d.HasChange("pin_to_stack") {
+		oldPin, newPin := d.GetChange("pin_to_stack")
+		urlValues := &url.Values{}
+		urlValues.Add("computeId", d.Id())
+		if oldPin.(bool) == true && newPin.(bool) == false {
+			_, err := c.DecortAPICall(ctx, "POST", ComputeUnpinFromStackAPI, urlValues)
+			if err != nil {
+				return diag.FromErr(err)
+			}
+		}
+		if oldPin.(bool) == false && newPin.(bool) == true {
+			_, err := c.DecortAPICall(ctx, "POST", ComputePinToStackAPI, urlValues)
+			if err != nil {
+				return diag.FromErr(err)
+			}
+		}
+	}
+
+	if d.HasChange("pause") {
+		oldPause, newPause := d.GetChange("pause")
+		urlValues := &url.Values{}
+		urlValues.Add("computeId", d.Id())
+		if oldPause.(bool) == true && newPause.(bool) == false {
+			_, err := c.DecortAPICall(ctx, "POST", ComputeResumeAPI, urlValues)
+			if err != nil {
+				return diag.FromErr(err)
+			}
+		}
+		if oldPause.(bool) == false && newPause.(bool) == true {
+			_, err := c.DecortAPICall(ctx, "POST", ComputePauseAPI, urlValues)
+			if err != nil {
+				return diag.FromErr(err)
+			}
+		}
+	}
+
+	if d.HasChange("reset") {
+		oldReset, newReset := d.GetChange("reset")
+		urlValues := &url.Values{}
+		urlValues.Add("computeId", d.Id())
+		if oldReset.(bool) == false && newReset.(bool) == true {
+			_, err := c.DecortAPICall(ctx, "POST", ComputeResetAPI, urlValues)
+			if err != nil {
+				return diag.FromErr(err)
+			}
+		}
+	}
+
+	//redeploy
+	if d.HasChange("image_id") {
+		oldImage, newImage := d.GetChange("image_id")
+		urlValues := &url.Values{}
+		urlValues.Add("computeId", d.Id())
+		urlValues.Add("force", "false")
+		_, err := c.DecortAPICall(ctx, "POST", ComputeStopAPI, urlValues)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+
+		if oldImage.(int) != newImage.(int) {
+			urlValues := &url.Values{}
+
+			urlValues.Add("computeId", d.Id())
+			urlValues.Add("imageId", strconv.Itoa(newImage.(int)))
+			if diskSize, ok := d.GetOk("boot_disk_size"); ok {
+				urlValues.Add("diskSize", strconv.Itoa(diskSize.(int)))
+			}
+			if dataDisks, ok := d.GetOk("data_disks"); ok {
+				urlValues.Add("dataDisks", dataDisks.(string))
+			}
+			if autoStart, ok := d.GetOk("auto_start"); ok {
+				urlValues.Add("autoStart", strconv.FormatBool(autoStart.(bool)))
+			}
+			if forceStop, ok := d.GetOk("force_stop"); ok {
+				urlValues.Add("forceStop", strconv.FormatBool(forceStop.(bool)))
+			}
+			_, err := c.DecortAPICall(ctx, "POST", ComputeRedeployAPI, urlValues)
+			if err != nil {
+				return diag.FromErr(err)
+			}
+		}
+	}
+
 	// we may reuse dataSourceComputeRead here as we maintain similarity
 	// between Compute resource and Compute data source schemas
 	return resourceComputeRead(ctx, d, m)
@@ -836,17 +1224,165 @@ func resourceComputeDelete(ctx context.Context, d *schema.ResourceData, m interf
 	return nil
 }
 
+func disksSubresourceSchemaMake() map[string]*schema.Schema {
+	rets := map[string]*schema.Schema{
+		"disk_name": {
+			Type:        schema.TypeString,
+			Required:    true,
+			Description: "Name for disk",
+		},
+		"size": {
+			Type:        schema.TypeInt,
+			Required:    true,
+			Description: "Disk size in GiB",
+		},
+		"disk_type": {
+			Type:         schema.TypeString,
+			Computed:     true,
+			Optional:     true,
+			ValidateFunc: validation.StringInSlice([]string{"B", "D"}, false),
+			Description:  "The type of disk in terms of its role in compute: 'B=Boot, D=Data'",
+		},
+		"sep_id": {
+			Type:        schema.TypeInt,
+			Computed:    true,
+			Optional:    true,
+			Description: "Storage endpoint provider ID; by default the same with boot disk",
+		},
+		"pool": {
+			Type:        schema.TypeString,
+			Computed:    true,
+			Optional:    true,
+			Description: "Pool name; by default will be chosen automatically",
+		},
+		"desc": {
+			Type:        schema.TypeString,
+			Computed:    true,
+			Optional:    true,
+			Description: "Optional description",
+		},
+		"image_id": {
+			Type:        schema.TypeInt,
+			Computed:    true,
+			Optional:    true,
+			Description: "Specify image id for create disk from template",
+		},
+		"permanently": {
+			Type:        schema.TypeBool,
+			Computed:    true,
+			Optional:    true,
+			Description: "Disk deletion status",
+		},
+		"disk_id": {
+			Type:        schema.TypeInt,
+			Computed:    true,
+			Description: "Disk ID",
+		},
+		"shareable": {
+			Type:     schema.TypeBool,
+			Computed: true,
+		},
+		"size_max": {
+			Type:     schema.TypeInt,
+			Computed: true,
+		},
+		"size_used": {
+			Type:     schema.TypeInt,
+			Computed: true,
+		},
+	}
+	return rets
+}
+
+func tagsSubresourceSchemaMake() map[string]*schema.Schema {
+	return map[string]*schema.Schema{
+		"key": {
+			Type:     schema.TypeString,
+			Required: true,
+		},
+		"value": {
+			Type:     schema.TypeString,
+			Required: true,
+		},
+	}
+}
+
+func portForwardingSubresourceSchemaMake() map[string]*schema.Schema {
+	return map[string]*schema.Schema{
+		"public_port_start": {
+			Type:     schema.TypeInt,
+			Required: true,
+		},
+		"public_port_end": {
+			Type:     schema.TypeInt,
+			Optional: true,
+			Default:  -1,
+		},
+		"local_port": {
+			Type:     schema.TypeInt,
+			Required: true,
+		},
+		"proto": {
+			Type:         schema.TypeString,
+			Required:     true,
+			ValidateFunc: validation.StringInSlice([]string{"tcp", "udp"}, false),
+		},
+	}
+}
+
+func userAccessSubresourceSchemaMake() map[string]*schema.Schema {
+	return map[string]*schema.Schema{
+		"username": {
+			Type:     schema.TypeString,
+			Required: true,
+		},
+		"access_type": {
+			Type:     schema.TypeString,
+			Required: true,
+		},
+	}
+}
+
+func snapshotSubresourceSchemaMake() map[string]*schema.Schema {
+	return map[string]*schema.Schema{
+		"label": {
+			Type:     schema.TypeString,
+			Required: true,
+		},
+	}
+}
+
+func snapshotRollbackSubresourceSchemaMake() map[string]*schema.Schema {
+	return map[string]*schema.Schema{
+		"label": {
+			Type:     schema.TypeString,
+			Required: true,
+		},
+	}
+}
+
+func cdSubresourceSchemaMake() map[string]*schema.Schema {
+	return map[string]*schema.Schema{
+		"cdrom_id": {
+			Type:     schema.TypeInt,
+			Required: true,
+		},
+	}
+}
+
 func ResourceComputeSchemaMake() map[string]*schema.Schema {
 	rets := map[string]*schema.Schema{
 		"name": {
 			Type:        schema.TypeString,
 			Required:    true,
+			ForceNew:    true,
 			Description: "Name of this compute. Compute names are case sensitive and must be unique in the resource group.",
 		},
 
 		"rg_id": {
 			Type:         schema.TypeInt,
 			Required:     true,
+			ForceNew:     true,
 			ValidateFunc: validation.IntAtLeast(1),
 			Description:  "ID of the resource group where this compute should be deployed.",
 		},
@@ -875,15 +1411,16 @@ func ResourceComputeSchemaMake() map[string]*schema.Schema {
 		},
 
 		"image_id": {
-			Type:        schema.TypeInt,
-			Required:    true,
-			ForceNew:    true,
+			Type:     schema.TypeInt,
+			Required: true,
+			//ForceNew:    true, //REDEPLOY
 			Description: "ID of the OS image to base this compute instance on.",
 		},
 
 		"boot_disk_size": {
 			Type:        schema.TypeInt,
 			Optional:    true,
+			Computed:    true,
 			Description: "This compute instance boot disk size in GB. Make sure it is large enough to accomodate selected OS image.",
 		},
 
@@ -969,77 +1506,12 @@ func ResourceComputeSchemaMake() map[string]*schema.Schema {
 
 		"disks": {
 			Type:     schema.TypeList,
-			Computed: true,
 			Optional: true,
 			Elem: &schema.Resource{
-				Schema: map[string]*schema.Schema{
-					"disk_name": {
-						Type:        schema.TypeString,
-						Required:    true,
-						Description: "Name for disk",
-					},
-					"size": {
-						Type:        schema.TypeInt,
-						Required:    true,
-						Description: "Disk size in GiB",
-					},
-					"disk_type": {
-						Type:         schema.TypeString,
-						Computed:     true,
-						Optional:     true,
-						ValidateFunc: validation.StringInSlice([]string{"B", "D"}, false),
-						Description:  "The type of disk in terms of its role in compute: 'B=Boot, D=Data'",
-					},
-					"sep_id": {
-						Type:        schema.TypeInt,
-						Computed:    true,
-						Optional:    true,
-						Description: "Storage endpoint provider ID; by default the same with boot disk",
-					},
-					"shareable": {
-						Type:     schema.TypeBool,
-						Computed: true,
-					},
-					"size_max": {
-						Type:     schema.TypeInt,
-						Computed: true,
-					},
-					"size_used": {
-						Type:     schema.TypeFloat,
-						Computed: true,
-					},
-					"pool": {
-						Type:        schema.TypeString,
-						Computed:    true,
-						Optional:    true,
-						Description: "Pool name; by default will be chosen automatically",
-					},
-					"desc": {
-						Type:        schema.TypeString,
-						Computed:    true,
-						Optional:    true,
-						Description: "Optional description",
-					},
-					"image_id": {
-						Type:        schema.TypeInt,
-						Computed:    true,
-						Optional:    true,
-						Description: "Specify image id for create disk from template",
-					},
-					"disk_id": {
-						Type:        schema.TypeInt,
-						Computed:    true,
-						Description: "Disk ID",
-					},
-					"permanently": {
-						Type:        schema.TypeBool,
-						Optional:    true,
-						Default:     false,
-						Description: "Disk deletion status",
-					},
-				},
+				Schema: disksSubresourceSchemaMake(),
 			},
 		},
+
 		"sep_id": {
 			Type:        schema.TypeInt,
 			Optional:    true,
@@ -1089,6 +1561,62 @@ func ResourceComputeSchemaMake() map[string]*schema.Schema {
 			},
 		*/
 
+		"tags": {
+			Type:     schema.TypeSet,
+			Optional: true,
+			Elem: &schema.Resource{
+				Schema: tagsSubresourceSchemaMake(),
+			},
+		},
+
+		"port_forwarding": {
+			Type:     schema.TypeSet,
+			Optional: true,
+			Elem: &schema.Resource{
+				Schema: portForwardingSubresourceSchemaMake(),
+			},
+		},
+
+		"user_access": {
+			Type:     schema.TypeSet,
+			Optional: true,
+			Elem: &schema.Resource{
+				Schema: userAccessSubresourceSchemaMake(),
+			},
+		},
+
+		"snapshot": {
+			Type:     schema.TypeSet,
+			Optional: true,
+			Elem: &schema.Resource{
+				Schema: snapshotSubresourceSchemaMake(),
+			},
+		},
+
+		"rollback": {
+			Type:     schema.TypeSet,
+			MaxItems: 1,
+			Optional: true,
+			Elem: &schema.Resource{
+				Schema: snapshotRollbackSubresourceSchemaMake(),
+			},
+		},
+
+		"cd": {
+			Type:     schema.TypeSet,
+			Optional: true,
+			MaxItems: 1,
+			Elem: &schema.Resource{
+				Schema: cdSubresourceSchemaMake(),
+			},
+		},
+
+		"pin_to_stack": {
+			Type:     schema.TypeBool,
+			Optional: true,
+			Default:  false,
+		},
+
 		"description": {
 			Type:        schema.TypeString,
 			Optional:    true,
@@ -1099,8 +1627,6 @@ func ResourceComputeSchemaMake() map[string]*schema.Schema {
 			Type:        schema.TypeString,
 			Optional:    true,
 			Description: "Optional cloud_init parameters. Applied when creating new compute instance only, ignored in all other cases.",
-			//Default:          "applied",
-			//DiffSuppressFunc: cloudInitDiffSupperss,
 		},
 
 		"enabled": {
@@ -1110,40 +1636,37 @@ func ResourceComputeSchemaMake() map[string]*schema.Schema {
 			Description: "If true - enable compute, else - disable",
 		},
 
-		// The rest are Compute properties, which are "computed" once it is created
-		"rg_name": {
-			Type:        schema.TypeString,
-			Computed:    true,
-			Description: "Name of the resource group where this compute instance is located.",
+		"pause": {
+			Type:     schema.TypeBool,
+			Optional: true,
+			Default:  false,
 		},
 
-		"account_id": {
-			Type:        schema.TypeInt,
-			Computed:    true,
-			Description: "ID of the account this compute instance belongs to.",
+		"reset": {
+			Type:     schema.TypeBool,
+			Optional: true,
+			Default:  false,
 		},
 
-		"account_name": {
-			Type:        schema.TypeString,
-			Computed:    true,
-			Description: "Name of the account this compute instance belongs to.",
+		"auto_start": {
+			Type:        schema.TypeBool,
+			Optional:    true,
+			Default:     false,
+			Description: "Flag for redeploy compute",
 		},
-
-		"boot_disk_id": {
-			Type:        schema.TypeInt,
-			Computed:    true,
-			Description: "This compute instance boot disk ID.",
+		"force_stop": {
+			Type:        schema.TypeBool,
+			Optional:    true,
+			Default:     false,
+			Description: "Flag for redeploy compute",
 		},
-
-		"os_users": {
-			Type:     schema.TypeList,
-			Computed: true,
-			Elem: &schema.Resource{
-				Schema: osUsersSubresourceSchemaMake(),
-			},
-			Description: "Guest OS users provisioned on this compute instance.",
+		"data_disks": {
+			Type:         schema.TypeString,
+			Optional:     true,
+			ValidateFunc: validation.StringInSlice([]string{"KEEP", "DETACH", "DESTROY"}, false),
+			Default:      "DETACH",
+			Description:  "Flag for redeploy compute",
 		},
-
 		"started": {
 			Type:        schema.TypeBool,
 			Optional:    true,
@@ -1169,6 +1692,227 @@ func ResourceComputeSchemaMake() map[string]*schema.Schema {
 			Type:        schema.TypeString,
 			Optional:    true,
 			Description: "compute purpose",
+		},
+
+		// The rest are Compute properties, which are "computed" once it is created
+		"account_id": {
+			Type:        schema.TypeInt,
+			Computed:    true,
+			Description: "ID of the account this compute instance belongs to.",
+		},
+		"account_name": {
+			Type:        schema.TypeString,
+			Computed:    true,
+			Description: "Name of the account this compute instance belongs to.",
+		},
+		"affinity_weight": {
+			Type:     schema.TypeInt,
+			Computed: true,
+		},
+		"arch": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"boot_order": {
+			Type:     schema.TypeList,
+			Computed: true,
+			Elem: &schema.Schema{
+				Type: schema.TypeString,
+			},
+		},
+		"boot_disk_id": {
+			Type:        schema.TypeInt,
+			Computed:    true,
+			Description: "This compute instance boot disk ID.",
+		},
+		"clone_reference": {
+			Type:     schema.TypeInt,
+			Computed: true,
+		},
+		"clones": {
+			Type:     schema.TypeList,
+			Computed: true,
+			Elem: &schema.Schema{
+				Type: schema.TypeInt,
+			},
+		},
+		"computeci_id": {
+			Type:     schema.TypeInt,
+			Computed: true,
+		},
+		"created_by": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"created_time": {
+			Type:     schema.TypeInt,
+			Computed: true,
+		},
+		"custom_fields": {
+			Type:     schema.TypeList,
+			Computed: true,
+			Elem: &schema.Resource{
+				Schema: map[string]*schema.Schema{
+					"key": {
+						Type:     schema.TypeString,
+						Computed: true,
+					},
+					"val": {
+						Type:     schema.TypeString,
+						Computed: true,
+					},
+				},
+			},
+		},
+		"deleted_by": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"deleted_time": {
+			Type:     schema.TypeInt,
+			Computed: true,
+		},
+		"devices": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"gid": {
+			Type:     schema.TypeInt,
+			Computed: true,
+		},
+		"guid": {
+			Type:     schema.TypeInt,
+			Computed: true,
+		},
+		"compute_id": {
+			Type:     schema.TypeInt,
+			Computed: true,
+		},
+		"interfaces": {
+			Type:     schema.TypeList,
+			Computed: true,
+			Elem: &schema.Resource{
+				Schema: computeInterfacesSchemaMake(),
+			},
+		},
+		"lock_status": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"manager_id": {
+			Type:     schema.TypeInt,
+			Computed: true,
+		},
+		"manager_type": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"migrationjob": {
+			Type:     schema.TypeInt,
+			Computed: true,
+		},
+		"milestones": {
+			Type:     schema.TypeInt,
+			Computed: true,
+		},
+		"natable_vins_id": {
+			Type:     schema.TypeInt,
+			Computed: true,
+		},
+		"natable_vins_ip": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"natable_vins_name": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"natable_vins_network": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"natable_vins_network_name": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"os_users": {
+			Type:     schema.TypeList,
+			Computed: true,
+			Elem: &schema.Resource{
+				Schema: osUsersSubresourceSchemaMake(),
+			},
+			Description: "Guest OS users provisioned on this compute instance.",
+		},
+		"pinned": {
+			Type:     schema.TypeBool,
+			Computed: true,
+		},
+		"reference_id": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"registered": {
+			Type:     schema.TypeBool,
+			Computed: true,
+		},
+		"res_name": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"rg_name": {
+			Type:        schema.TypeString,
+			Computed:    true,
+			Description: "Name of the resource group where this compute instance is located.",
+		},
+		"snap_sets": {
+			Type:     schema.TypeList,
+			Computed: true,
+			Elem: &schema.Resource{
+				Schema: computeSnapSetsSchemaMake(),
+			},
+		},
+		"stateless_sep_id": {
+			Type:     schema.TypeInt,
+			Computed: true,
+		},
+		"stateless_sep_type": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"status": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"tech_status": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"updated_by": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"updated_time": {
+			Type:     schema.TypeInt,
+			Computed: true,
+		},
+		"user_managed": {
+			Type:     schema.TypeBool,
+			Computed: true,
+		},
+		"vgpus": {
+			Type:     schema.TypeList,
+			Computed: true,
+			Elem: &schema.Schema{
+				Type: schema.TypeInt,
+			},
+		},
+		"virtual_image_id": {
+			Type:     schema.TypeInt,
+			Computed: true,
+		},
+		"virtual_image_name": {
+			Type:     schema.TypeString,
+			Computed: true,
 		},
 	}
 	return rets

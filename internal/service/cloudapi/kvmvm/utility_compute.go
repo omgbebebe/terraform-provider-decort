@@ -37,7 +37,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"strconv"
 
 	"github.com/rudecs/terraform-provider-decort/internal/controller"
 	log "github.com/sirupsen/logrus"
@@ -242,90 +241,20 @@ func utilityComputeNetworksConfigure(ctx context.Context, d *schema.ResourceData
 	return nil
 }
 
-func utilityComputeCheckPresence(ctx context.Context, d *schema.ResourceData, m interface{}) (string, error) {
-	// This function tries to locate Compute by one of the following approaches:
-	// - if compute_id is specified - locate by compute ID
-	// - if compute_name is specified - locate by a combination of compute name and resource
-	//   group ID
-	//
-	// If succeeded, it returns non-empty string that contains JSON formatted facts about the
-	// Compute as returned by compute/get API call.
-	// Otherwise it returns empty string and meaningful error.
-	//
-	// This function does not modify its ResourceData argument, so it is safe to use it as core
-	// method for resource's Exists method.
-	//
-
+func utilityComputeCheckPresence(ctx context.Context, d *schema.ResourceData, m interface{}) (RecordCompute, error) {
 	c := m.(*controller.ControllerCfg)
 	urlValues := &url.Values{}
+	compute := &RecordCompute{}
 
-	// make it possible to use "read" & "check presence" functions with compute ID set so
-	// that Import of Compute resource is possible
-	idSet := false
-	theId, err := strconv.Atoi(d.Id())
-	if err != nil || theId <= 0 {
-		computeId, argSet := d.GetOk("compute_id") // NB: compute_id is NOT present in computeResource schema!
-		if argSet {
-			theId = computeId.(int)
-			idSet = true
-		}
-	} else {
-		idSet = true
-	}
-
-	if idSet {
-		// compute ID is specified, try to get compute instance straight by this ID
-		log.Debugf("utilityComputeCheckPresence: locating compute by its ID %d", theId)
-		urlValues.Add("computeId", fmt.Sprintf("%d", theId))
-		computeFacts, err := c.DecortAPICall(ctx, "POST", ComputeGetAPI, urlValues)
-		if err != nil {
-			return "", err
-		}
-		return computeFacts, nil
-	}
-
-	// ID was not set in the schema upon entering this function - work through Compute name
-	// and RG ID
-	computeName, argSet := d.GetOk("name")
-	if !argSet {
-		return "", fmt.Errorf("cannot locate compute instance if name is empty and no compute ID specified")
-	}
-
-	rgId, argSet := d.GetOk("rg_id")
-	if !argSet {
-		return "", fmt.Errorf("cannot locate compute by name %s if no resource group ID is set", computeName.(string))
-	}
-
-	urlValues.Add("rgId", fmt.Sprintf("%d", rgId))
-	apiResp, err := c.DecortAPICall(ctx, "POST", RgListComputesAPI, urlValues)
+	urlValues.Add("computeId", d.Id())
+	computeRaw, err := c.DecortAPICall(ctx, "POST", ComputeGetAPI, urlValues)
 	if err != nil {
-		return "", err
+		return *compute, err
 	}
 
-	log.Debugf("utilityComputeCheckPresence: ready to unmarshal string %s", apiResp)
-
-	computeList := RgListComputesResp{}
-	err = json.Unmarshal([]byte(apiResp), &computeList)
+	err = json.Unmarshal([]byte(computeRaw), &compute)
 	if err != nil {
-		return "", err
+		return *compute, err
 	}
-
-	// log.Printf("%#v", computeList)
-	log.Debugf("utilityComputeCheckPresence: traversing decoded JSON of length %d", len(computeList))
-	for index, item := range computeList {
-		// need to match Compute by name, skip Computes with the same name in DESTROYED satus
-		if item.Name == computeName.(string) && item.Status != "DESTROYED" {
-			log.Debugf("utilityComputeCheckPresence: index %d, matched name %s", index, item.Name)
-			// we found the Compute we need - now get detailed information via compute/get API
-			cgetValues := &url.Values{}
-			cgetValues.Add("computeId", fmt.Sprintf("%d", item.ID))
-			apiResp, err = c.DecortAPICall(ctx, "POST", ComputeGetAPI, cgetValues)
-			if err != nil {
-				return "", err
-			}
-			return apiResp, nil
-		}
-	}
-
-	return "", nil // there should be no error if Compute does not exist
+	return *compute, nil
 }

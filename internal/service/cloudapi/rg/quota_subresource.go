@@ -45,32 +45,33 @@ func makeQuotaRecord(arg_list []interface{}) QuotaRecord {
 		ExtIPs:     -1,
 		GpuUnits:   -1,
 	}
-	subres_data := arg_list[0].(map[string]interface{})
+	if len(arg_list) != 0 {
+		subres_data := arg_list[0].(map[string]interface{})
 
-	if subres_data["cpu"].(int) > 0 {
-		quota.Cpu = subres_data["cpu"].(int)
+		if subres_data["cpu"].(int) > 0 {
+			quota.Cpu = subres_data["cpu"].(int)
+		}
+
+		if subres_data["disk"].(int) > 0 {
+			quota.Disk = subres_data["disk"].(int) // Disk capacity ib GB
+		}
+
+		if subres_data["ram"].(float64) > 0 {
+			quota.Ram = subres_data["ram"].(float64) // RAM volume in MB, as float64!
+		}
+
+		if subres_data["ext_traffic"].(int) > 0 {
+			quota.ExtTraffic = subres_data["ext_traffic"].(int)
+		}
+
+		if subres_data["ext_ips"].(int) > 0 {
+			quota.ExtIPs = subres_data["ext_ips"].(int)
+		}
+
+		if subres_data["gpu_units"].(int) > 0 {
+			quota.GpuUnits = subres_data["gpu_units"].(int)
+		}
 	}
-
-	if subres_data["disk"].(int) > 0 {
-		quota.Disk = subres_data["disk"].(int) // Disk capacity ib GB
-	}
-
-	if subres_data["ram"].(float64) > 0 {
-		quota.Ram = subres_data["ram"].(float64) // RAM volume in MB, as float64!
-	}
-
-	if subres_data["ext_traffic"].(int) > 0 {
-		quota.ExtTraffic = subres_data["ext_traffic"].(int)
-	}
-
-	if subres_data["ext_ips"].(int) > 0 {
-		quota.ExtIPs = subres_data["ext_ips"].(int)
-	}
-
-	if subres_data["gpu_units"].(int) > 0 {
-		quota.GpuUnits = subres_data["gpu_units"].(int)
-	}
-
 	return quota
 }
 

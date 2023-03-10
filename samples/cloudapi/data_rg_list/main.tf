@@ -1,21 +1,20 @@
 /*
 Пример использования
-Получение списка всех resource groups
-
+Получение информации о списке всех ресурсных группах к которым есть доступ
 */
 #Расскомментируйте этот код,
 #и внесите необходимые правки в версию и путь,
 #чтобы работать с установленным вручную (не через hashicorp provider registry) провайдером
-/*
-terraform {
+
+/* terraform {
   required_providers {
     decort = {
       version = "1.1"
       source  = "digitalenergy.online/decort/decort"
     }
   }
-}
-*/
+} */
+
 provider "decort" {
   authenticator = "oauth2"
   #controller_url = <DECORT_CONTROLLER_URL>
@@ -25,25 +24,23 @@ provider "decort" {
   allow_unverified_ssl = true
 }
 
-data "decort_rg_list" "rl" {
-  #включение удаленных rg в результат поиска
-  #опциональный параметр
-  #тип - булев тип
-  #по-умолчанию - false
-  #includedeleted = true
-
-  #номер страницы для отображения
-  #опциональный параметр, тип - число
-  #если не задан - выводятся все доступные данные
-  #page = 2
-
+data "decort_rg_list" "rg_list" {
+  #отображать удаленные ресурсные группы или нет
+  #необязательный параметр
+  #тип - булевый
+  includedeleted = false
+  
+  #номер страницы
+  #необязательный параметр
+  #тип - число
+  page = 1
+  
   #размер страницы
-  #опциональный параметр, тип - число
-  #если не задан - выводятся все доступные данные
-  #size = 3
-
+  #необязательный параметр
+  #тип - число
+  size = 2
 }
 
-output "test" {
-  value = data.decort_rg_list.rl
+output "output" {
+  value = data.decort_rg_list.rg_list
 }
