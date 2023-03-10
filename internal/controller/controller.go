@@ -243,7 +243,7 @@ func (config *ControllerCfg) validateJWT(jwt string) (bool, error) {
 			Validate JWT against DECORT controller. JWT can be supplied as argument to this method. If empty string supplied as
 			argument, JWT will be taken from config attribute.
 			DECORT controller URL will always be taken from the config attribute assigned at instantiation.
-		    Validation is accomplished by attempting API call that lists accounts for the invoking user.
+		    Validation is accomplished by attempting API call that lists account for the invoking user.
 	*/
 	if jwt == "" {
 		if config.jwt == "" {
@@ -256,7 +256,7 @@ func (config *ControllerCfg) validateJWT(jwt string) (bool, error) {
 		return false, fmt.Errorf("validateJWT method called, but no OAuth2 URL provided.")
 	}
 
-	req, err := http.NewRequest("POST", config.controller_url+"/restmachine/cloudapi/accounts/list", nil)
+	req, err := http.NewRequest("POST", config.controller_url+"/restmachine/cloudapi/account/list", nil)
 	if err != nil {
 		return false, err
 	}
@@ -297,7 +297,7 @@ func (config *ControllerCfg) validateLegacyUser() (bool, error) {
 	params.Add("password", config.legacy_password)
 	params_str := params.Encode()
 
-	req, err := http.NewRequest("POST", config.controller_url+"/restmachine/cloudapi/users/authenticate", strings.NewReader(params_str))
+	req, err := http.NewRequest("POST", config.controller_url+"/restmachine/cloudapi/user/authenticate", strings.NewReader(params_str))
 	if err != nil {
 		return false, err
 	}
