@@ -19,7 +19,7 @@ Terraform provider для платформы Digital Energy Cloud Orchestration 
 - Режим пользователя,
 - Режим администратора.
   Для переключения между режимами используйте флаг DECORT_ADMIN_MODE.
-  Вики проекта: https://github.com/rudecs/terraform-provider-decort/wiki
+  Вики проекта: https://repos.digitalenergy.online/BASIS/terraform-provider-decort/wiki
 
 ## Возможности провайдера
 
@@ -40,7 +40,7 @@ Terraform provider для платформы Digital Energy Cloud Orchestration 
 - Работа с locations,
 - Работа с load balancer.
 
-Вики проекта: https://github.com/rudecs/terraform-provider-decort/wiki
+Вики проекта: https://repos.digitalenergy.online/BASIS/terraform-provider-decort/wiki
 
 ## Начало
 
@@ -158,7 +158,7 @@ terraform init
 
 Примеры работы можно найти:
 
-- На вики проекта: https://github.com/rudecs/terraform-provider-decort/wiki
+- На вики проекта: https://repos.digitalenergy.online/BASIS/terraform-provider-decort/wiki
 - В папке `samples`
 
 Схемы к terraform'у доступны:

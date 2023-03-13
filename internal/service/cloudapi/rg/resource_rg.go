@@ -304,7 +304,7 @@ func resourceResgroupUpdate(ctx context.Context, d *schema.ResourceData, m inter
 		d.Get("name").(string), d.Get("account_id").(int))
 
 	c := m.(*controller.ControllerCfg)
-    urlValues := &url.Values{}
+	urlValues := &url.Values{}
 
 	// Check input values
 	// AccountID
