@@ -3,6 +3,7 @@ Copyright (c) 2019-2022 Digital Energy Cloud Solutions LLC. All Rights Reserved.
 Authors:
 Petr Krutov, <petr.krutov@digitalenergy.online>
 Stanislav Solovev, <spsolovev@digitalenergy.online>
+Kasim Baybikov, <kmbaybikov@basistech.ru>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,14 +22,14 @@ package cloudbroker
 
 import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"github.com/rudecs/terraform-provider-decort/internal/service/cloudbroker/account"
-	"github.com/rudecs/terraform-provider-decort/internal/service/cloudbroker/disks"
-	"github.com/rudecs/terraform-provider-decort/internal/service/cloudbroker/grid"
-	"github.com/rudecs/terraform-provider-decort/internal/service/cloudbroker/image"
-	"github.com/rudecs/terraform-provider-decort/internal/service/cloudbroker/pcidevice"
-	"github.com/rudecs/terraform-provider-decort/internal/service/cloudbroker/rg"
-	"github.com/rudecs/terraform-provider-decort/internal/service/cloudbroker/sep"
-	"github.com/rudecs/terraform-provider-decort/internal/service/cloudbroker/vgpu"
+	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudbroker/account"
+	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudbroker/disks"
+	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudbroker/grid"
+	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudbroker/image"
+	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudbroker/pcidevice"
+	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudbroker/rg"
+	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudbroker/sep"
+	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudbroker/vgpu"
 )
 
 func NewDataSourcesMap() map[string]*schema.Resource {

@@ -3,6 +3,7 @@ Copyright (c) 2019-2022 Digital Energy Cloud Solutions LLC. All Rights Reserved.
 Authors:
 Petr Krutov, <petr.krutov@digitalenergy.online>
 Stanislav Solovev, <spsolovev@digitalenergy.online>
+Kasim Baybikov, <kmbaybikov@basistech.ru>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,17 +22,17 @@ package cloudapi
 
 import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"github.com/rudecs/terraform-provider-decort/internal/service/cloudapi/account"
-	"github.com/rudecs/terraform-provider-decort/internal/service/cloudapi/bservice"
-	"github.com/rudecs/terraform-provider-decort/internal/service/cloudapi/disks"
-	"github.com/rudecs/terraform-provider-decort/internal/service/cloudapi/image"
-	"github.com/rudecs/terraform-provider-decort/internal/service/cloudapi/k8s"
-	"github.com/rudecs/terraform-provider-decort/internal/service/cloudapi/kvmvm"
-	"github.com/rudecs/terraform-provider-decort/internal/service/cloudapi/lb"
-	"github.com/rudecs/terraform-provider-decort/internal/service/cloudapi/pfw"
-	"github.com/rudecs/terraform-provider-decort/internal/service/cloudapi/rg"
-	"github.com/rudecs/terraform-provider-decort/internal/service/cloudapi/snapshot"
-	"github.com/rudecs/terraform-provider-decort/internal/service/cloudapi/vins"
+	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudapi/account"
+	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudapi/bservice"
+	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudapi/disks"
+	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudapi/image"
+	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudapi/k8s"
+	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudapi/kvmvm"
+	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudapi/lb"
+	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudapi/pfw"
+	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudapi/rg"
+	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudapi/snapshot"
+	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudapi/vins"
 )
 
 func NewRersourcesMap() map[string]*schema.Resource {

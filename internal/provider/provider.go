@@ -3,6 +3,7 @@ Copyright (c) 2019-2022 Digital Energy Cloud Solutions LLC. All Rights Reserved.
 Authors:
 Petr Krutov, <petr.krutov@digitalenergy.online>
 Stanislav Solovev, <spsolovev@digitalenergy.online>
+Kasim Baybikov, <kmbaybikov@basistech.ru>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,9 +28,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 	"golang.org/x/net/context"
 
-	"github.com/rudecs/terraform-provider-decort/internal/controller"
-	"github.com/rudecs/terraform-provider-decort/internal/location"
-	"github.com/rudecs/terraform-provider-decort/internal/statefuncs"
+	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/controller"
+	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/location"
+	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/statefuncs"
 )
 
 func Provider() *schema.Provider {

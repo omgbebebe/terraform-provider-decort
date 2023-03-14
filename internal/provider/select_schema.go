@@ -3,6 +3,7 @@ Copyright (c) 2019-2022 Digital Energy Cloud Solutions LLC. All Rights Reserved.
 Authors:
 Petr Krutov, <petr.krutov@digitalenergy.online>
 Stanislav Solovev, <spsolovev@digitalenergy.online>
+Kasim Baybikov, <kmbaybikov@basistech.ru>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,8 +25,8 @@ import (
 	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	ca "github.com/rudecs/terraform-provider-decort/internal/provider/cloudapi"
-	cb "github.com/rudecs/terraform-provider-decort/internal/provider/cloudbroker"
+	ca "repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/provider/cloudapi"
+	cb "repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/provider/cloudbroker"
 )
 
 func selectSchema(isDatasource bool) map[string]*schema.Resource {

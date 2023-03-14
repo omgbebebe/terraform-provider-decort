@@ -21,12 +21,12 @@ limitations under the License.
 Terraform DECORT provider - manage resources provided by DECORT (Digital Energy Cloud
 Orchestration Technology) with Terraform by Hashicorp.
 
-Source code: https://github.com/rudecs/terraform-provider-decort
+Source code: https://repos.digitalenergy.online/BASIS/terraform-provider-decort
 
 Please see README.md to learn where to place source code so that it
 builds seamlessly.
 
-Documentation: https://github.com/rudecs/terraform-provider-decort/wiki
+Documentation: https://repos.digitalenergy.online/BASIS/terraform-provider-decort/wiki
 */
 
 package grid
@@ -37,7 +37,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"github.com/rudecs/terraform-provider-decort/internal/constants"
+	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/constants"
 )
 
 func flattenGrid(d *schema.ResourceData, grid *Grid) {

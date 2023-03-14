@@ -1,4 +1,4 @@
-module github.com/rudecs/terraform-provider-decort
+module repos.digitalenergy.online/BASIS/terraform-provider-decort
 
 go 1.18
 

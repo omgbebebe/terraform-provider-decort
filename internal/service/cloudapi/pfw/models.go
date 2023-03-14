@@ -3,6 +3,7 @@ Copyright (c) 2019-2022 Digital Energy Cloud Solutions LLC. All Rights Reserved.
 Authors:
 Petr Krutov, <petr.krutov@digitalenergy.online>
 Stanislav Solovev, <spsolovev@digitalenergy.online>
+Kasim Baybikov, <kmbaybikov@basistech.ru>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,15 +22,16 @@ limitations under the License.
 Terraform DECORT provider - manage resources provided by DECORT (Digital Energy Cloud
 Orchestration Technology) with Terraform by Hashicorp.
 
-Source code: https://github.com/rudecs/terraform-provider-decort
+Source code: https://repos.digitalenergy.online/BASIS/terraform-provider-decort
 
 Please see README.md to learn where to place source code so that it
 builds seamlessly.
 
-Documentation: https://github.com/rudecs/terraform-provider-decort/wiki
+Documentation: https://repos.digitalenergy.online/BASIS/terraform-provider-decort/wiki
 */
 
 package pfw
+
 type PfwRecord struct {
 	ID              int    `json:"id"`
 	LocalIP         string `json:"localIp"`
@@ -41,5 +43,3 @@ type PfwRecord struct {
 }
 
 type ComputePfwListResp []PfwRecord
-
-
