@@ -22,17 +22,17 @@ package cloudbroker
 
 import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudbroker/account"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudbroker/disks"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudbroker/image"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudbroker/k8s"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudbroker/kvmvm"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudbroker/pcidevice"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudbroker/pfw"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudbroker/rg"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudbroker/sep"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudbroker/snapshot"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudbroker/vins"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudbroker/account"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudbroker/disks"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudbroker/image"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudbroker/k8s"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudbroker/kvmvm"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudbroker/pcidevice"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudbroker/pfw"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudbroker/rg"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudbroker/sep"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudbroker/snapshot"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudbroker/vins"
 )
 
 func NewRersourcesMap() map[string]*schema.Resource {

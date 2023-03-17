@@ -28,9 +28,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 	"golang.org/x/net/context"
 
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/controller"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/location"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/statefuncs"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/controller"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/location"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/statefuncs"
 )
 
 func Provider() *schema.Provider {

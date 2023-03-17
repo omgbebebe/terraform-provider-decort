@@ -27,7 +27,7 @@ import (
 	"net/url"
 
 	log "github.com/sirupsen/logrus"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/controller"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/controller"
 )
 
 var DefaultGridID int

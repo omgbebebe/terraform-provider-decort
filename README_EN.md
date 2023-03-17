@@ -19,7 +19,7 @@ The provider support two working modes:
 - User mode,
 - Administator mode.
   Use flag DECORT_ADMIN_MODE for swithcing beetwen modes.
-  See user guide at https://repos.digitalenergy.online/BASIS/terraform-provider-decort/wiki
+  See user guide at https://repository.basistech.ru/BASIS/terraform-provider-decort/wiki
 
 ## Features
 
@@ -42,7 +42,7 @@ The provider support two working modes:
 
 This provider supports Import operations on pre-existing resources.
 
-See user guide at https://repos.digitalenergy.online/BASIS/terraform-provider-decort/wiki
+See user guide at https://repository.basistech.ru/BASIS/terraform-provider-decort/wiki
 
 ## Get Started
 
@@ -158,7 +158,7 @@ More details about the provider's building process: https://learn.hashicorp.com/
 
 ## Examples and Samples
 
-- Examples: https://repos.digitalenergy.online/BASIS/terraform-provider-decort/wiki
+- Examples: https://repository.basistech.ru/BASIS/terraform-provider-decort/wiki
 - Samples: see in repository `samples`
 
 Terraform schemas in:

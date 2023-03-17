@@ -25,8 +25,8 @@ import (
 	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	ca "repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/provider/cloudapi"
-	cb "repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/provider/cloudbroker"
+	ca "repository.basistech.ru/BASIS/terraform-provider-decort/internal/provider/cloudapi"
+	cb "repository.basistech.ru/BASIS/terraform-provider-decort/internal/provider/cloudbroker"
 )
 
 func selectSchema(isDatasource bool) map[string]*schema.Resource {

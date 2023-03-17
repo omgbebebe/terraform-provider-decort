@@ -22,12 +22,12 @@ limitations under the License.
 Terraform DECORT provider - manage resources provided by DECORT (Digital Energy Cloud
 Orchestration Technology) with Terraform by Hashicorp.
 
-Source code: https://repos.digitalenergy.online/BASIS/terraform-provider-decort
+Source code: https://repository.basistech.ru/BASIS/terraform-provider-decort
 
 Please see README.md to learn where to place source code so that it
 builds seamlessly.
 
-Documentation: https://repos.digitalenergy.online/BASIS/terraform-provider-decort/wiki
+Documentation: https://repository.basistech.ru/BASIS/terraform-provider-decort/wiki
 */
 
 package kvmvm
@@ -38,11 +38,11 @@ import (
 	"net/url"
 	"strconv"
 
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/constants"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/controller"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/dc"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/statefuncs"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/status"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/constants"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/controller"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/dc"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/statefuncs"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/status"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"

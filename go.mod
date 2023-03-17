@@ -1,4 +1,4 @@
-module repos.digitalenergy.online/BASIS/terraform-provider-decort
+module repository.basistech.ru/BASIS/terraform-provider-decort
 
 go 1.18
 

@@ -22,18 +22,18 @@ package cloudapi
 
 import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudapi/account"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudapi/bservice"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudapi/disks"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudapi/extnet"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudapi/image"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudapi/k8s"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudapi/kvmvm"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudapi/lb"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudapi/locations"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudapi/rg"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudapi/snapshot"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudapi/vins"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudapi/account"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudapi/bservice"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudapi/disks"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudapi/extnet"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudapi/image"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudapi/k8s"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudapi/kvmvm"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudapi/lb"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudapi/locations"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudapi/rg"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudapi/snapshot"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudapi/vins"
 )
 
 func NewDataSourcesMap() map[string]*schema.Resource {

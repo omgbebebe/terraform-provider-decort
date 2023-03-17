@@ -22,14 +22,14 @@ package cloudbroker
 
 import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudbroker/account"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudbroker/disks"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudbroker/grid"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudbroker/image"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudbroker/pcidevice"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudbroker/rg"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudbroker/sep"
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/service/cloudbroker/vgpu"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudbroker/account"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudbroker/disks"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudbroker/grid"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudbroker/image"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudbroker/pcidevice"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudbroker/rg"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudbroker/sep"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudbroker/vgpu"
 )
 
 func NewDataSourcesMap() map[string]*schema.Resource {

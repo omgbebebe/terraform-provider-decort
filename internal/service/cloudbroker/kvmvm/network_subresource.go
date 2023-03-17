@@ -21,12 +21,12 @@ limitations under the License.
 Terraform DECORT provider - manage resources provided by DECORT (Digital Energy Cloud
 Orchestration Technology) with Terraform by Hashicorp.
 
-Source code: https://repos.digitalenergy.online/BASIS/terraform-provider-decort
+Source code: https://repository.basistech.ru/BASIS/terraform-provider-decort
 
 Please see README.md to learn where to place source code so that it
 builds seamlessly.
 
-Documentation: https://repos.digitalenergy.online/BASIS/terraform-provider-decort/wiki
+Documentation: https://repository.basistech.ru/BASIS/terraform-provider-decort/wiki
 */
 
 package kvmvm
@@ -35,7 +35,7 @@ import (
 	"bytes"
 	"hash/fnv"
 
-	"repos.digitalenergy.online/BASIS/terraform-provider-decort/internal/statefuncs"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/statefuncs"
 	log "github.com/sirupsen/logrus"
 
 	"sort"
