@@ -38,12 +38,10 @@ import (
 	"net/url"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	log "github.com/sirupsen/logrus"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/controller"
 )
 
 func existRgID(ctx context.Context, d *schema.ResourceData, m interface{}) bool {
-	log.Debugf("resourceComputeCreate: check access for RG ID: %v", d.Get("rg_id").(int))
 	c := m.(*controller.ControllerCfg)
 	urlValues := &url.Values{}
 	rgList := []struct {
@@ -70,7 +68,6 @@ func existRgID(ctx context.Context, d *schema.ResourceData, m interface{}) bool 
 }
 
 func existImageId(ctx context.Context, d *schema.ResourceData, m interface{}) bool {
-	log.Debugf("resourceComputeCreate: check access for image ID: %v", d.Get("image_id").(int))
 	c := m.(*controller.ControllerCfg)
 	urlValues := &url.Values{}
 	imageList := []struct {
@@ -106,7 +103,6 @@ func existVinsIdInList(vinsId int, vinsList []struct {
 }
 
 func existVinsId(ctx context.Context, d *schema.ResourceData, m interface{}) (int, bool) {
-	log.Debugf("resourceComputeCreate: check access for vinses IDs")
 
 	c := m.(*controller.ControllerCfg)
 	urlValues := &url.Values{}

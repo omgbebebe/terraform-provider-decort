@@ -660,3 +660,17 @@ func flattenComputeGetAudits(computeAudits ListShortAudits) []map[string]interfa
 	}
 	return res
 }
+
+func flattenSnapshotUsage(computeSnapshotUasges ListUsageSnapshots) []map[string]interface{} {
+	res := make([]map[string]interface{}, 0)
+	for _, computeUsage := range computeSnapshotUasges {
+		temp := map[string]interface{}{
+			"count":     computeUsage.Count,
+			"stored":    computeUsage.Stored,
+			"label":     computeUsage.Label,
+			"timestamp": computeUsage.Timestamp,
+		}
+		res = append(res, temp)
+	}
+	return res
+}

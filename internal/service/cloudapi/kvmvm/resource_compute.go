@@ -38,12 +38,12 @@ import (
 	"net/url"
 	"strconv"
 
+	log "github.com/sirupsen/logrus"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/constants"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/controller"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/dc"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/statefuncs"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/status"
-	log "github.com/sirupsen/logrus"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -645,6 +645,7 @@ func resourceComputeUpdate(ctx context.Context, d *schema.ResourceData, m interf
 	if d.HasChange("disks") {
 		deletedDisks := make([]interface{}, 0)
 		addedDisks := make([]interface{}, 0)
+		updatedDisks := make([]interface{}, 0)
 
 		oldDisks, newDisks := d.GetChange("disks")
 		oldConv := oldDisks.([]interface{})
@@ -659,6 +660,10 @@ func resourceComputeUpdate(ctx context.Context, d *schema.ResourceData, m interf
 		for _, el := range newConv {
 			if !isContainsDisk(oldConv, el) {
 				addedDisks = append(addedDisks, el)
+			} else {
+				if isChangeDisk(oldConv, el) {
+					updatedDisks = append(updatedDisks, el)
+				}
 			}
 		}
 
@@ -725,6 +730,22 @@ func resourceComputeUpdate(ctx context.Context, d *schema.ResourceData, m interf
 				}
 
 				urlValues = &url.Values{}
+			}
+		}
+
+		if len(updatedDisks) > 0 {
+			for _, disk := range updatedDisks {
+				diskConv := disk.(map[string]interface{})
+				if diskConv["disk_name"].(string) == "bootdisk" {
+					continue
+				}
+				urlValues = &url.Values{}
+				urlValues.Add("diskId", strconv.Itoa(diskConv["disk_id"].(int)))
+				urlValues.Add("size", strconv.Itoa(diskConv["size"].(int)))
+				_, err := c.DecortAPICall(ctx, "POST", DisksResizeAPI, urlValues)
+				if err != nil {
+					return diag.FromErr(err)
+				}
 			}
 		}
 	}
@@ -1174,6 +1195,18 @@ func resourceComputeUpdate(ctx context.Context, d *schema.ResourceData, m interf
 	// we may reuse dataSourceComputeRead here as we maintain similarity
 	// between Compute resource and Compute data source schemas
 	return resourceComputeRead(ctx, d, m)
+}
+
+func isChangeDisk(els []interface{}, el interface{}) bool {
+	for _, elOld := range els {
+		elOldConv := elOld.(map[string]interface{})
+		elConv := el.(map[string]interface{})
+		if elOldConv["disk_id"].(int) == elConv["disk_id"].(int) &&
+			elOldConv["size"].(int) != elConv["size"].(int) {
+			return true
+		}
+	}
+	return false
 }
 
 func isContainsDisk(els []interface{}, el interface{}) bool {

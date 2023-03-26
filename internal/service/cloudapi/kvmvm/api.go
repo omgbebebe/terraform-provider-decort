@@ -77,6 +77,7 @@ const (
 	ComputeUserRevokeAPI             = "/restmachine/cloudapi/compute/userRevoke"
 	ComputeSnapshotCreateAPI         = "/restmachine/cloudapi/compute/snapshotCreate"
 	ComputeSnapshotDeleteAPI         = "/restmachine/cloudapi/compute/snapshotCreate"
+	ComputeSnapshotUsageAPI          = "/restmachine/cloudapi/compute/snapshotUsage"
 	ComputeSnapshotRollbackAPI       = "/restmachine/cloudapi/compute/snapshotRollback"
 	ComputePauseAPI                  = "/restmachine/cloudapi/compute/pause"
 	ComputeResumeAPI                 = "/restmachine/cloudapi/compute/resume"

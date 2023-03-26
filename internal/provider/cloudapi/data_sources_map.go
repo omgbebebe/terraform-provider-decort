@@ -48,6 +48,7 @@ func NewDataSourcesMap() map[string]*schema.Resource {
 		"decort_kvmvm_get_log":                  kvmvm.DataSourceComputeGetLog(),
 		"decort_kvmvm_pfw_list":                 kvmvm.DataSourceComputePfwList(),
 		"decort_kvmvm_user_list":                kvmvm.DataSourceComputeUserList(),
+		"decort_kvmvm_snapshot_usage":           kvmvm.DataSourceComputeSnapshotUsage(),
 		"decort_k8s":                            k8s.DataSourceK8s(),
 		"decort_k8s_list":                       k8s.DataSourceK8sList(),
 		"decort_k8s_list_deleted":               k8s.DataSourceK8sListDeleted(),

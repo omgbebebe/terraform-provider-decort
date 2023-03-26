@@ -38,12 +38,12 @@ import (
 	"net/url"
 	"strconv"
 
+	log "github.com/sirupsen/logrus"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/constants"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/controller"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/dc"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/location"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/status"
-	log "github.com/sirupsen/logrus"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/customdiff"
@@ -168,6 +168,11 @@ func resourceResgroupCreate(ctx context.Context, d *schema.ResourceData, m inter
 	extIp, argSet := d.GetOk("ext_ip")
 	if argSet {
 		urlValues.Add("extIp", extIp.(string))
+	}
+
+	regComputes, argSet := d.GetOk("register_computes")
+	if argSet {
+		urlValues.Add("registerComputes", strconv.FormatBool(regComputes.(bool)))
 	}
 
 	apiResp, err := c.DecortAPICall(ctx, "POST", ResgroupCreateAPI, urlValues)
