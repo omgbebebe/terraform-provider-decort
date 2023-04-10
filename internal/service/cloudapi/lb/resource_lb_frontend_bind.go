@@ -48,6 +48,15 @@ import (
 func resourceLBFrontendBindCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	log.Debugf("resourceLBFrontendBindCreate")
 
+	haveLBID, err := existLBID(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	if !haveLBID {
+		return diag.Errorf("resourceLBFrontendBindCreate: can't create LB frontend bind because LBID %d is not allowed or does not exist", d.Get("lb_id").(int))
+	}
+
 	c := m.(*controller.ControllerCfg)
 	urlValues := &url.Values{}
 	urlValues.Add("frontendName", d.Get("frontend_name").(string))
@@ -56,7 +65,7 @@ func resourceLBFrontendBindCreate(ctx context.Context, d *schema.ResourceData, m
 	urlValues.Add("bindingAddress", d.Get("address").(string))
 	urlValues.Add("bindingPort", strconv.Itoa(d.Get("port").(int)))
 
-	_, err := c.DecortAPICall(ctx, "POST", lbFrontendBindAPI, urlValues)
+	_, err = c.DecortAPICall(ctx, "POST", lbFrontendBindAPI, urlValues)
 	if err != nil {
 		return diag.FromErr(err)
 	}
@@ -124,10 +133,19 @@ func resourceLBFrontendBindDelete(ctx context.Context, d *schema.ResourceData, m
 	return nil
 }
 
-func resourceLBFrontendBindEdit(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
+func resourceLBFrontendBindUpdate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	log.Debugf("resourceLBFrontendBindEdit")
 	c := m.(*controller.ControllerCfg)
 	urlValues := &url.Values{}
+
+	haveLBID, err := existLBID(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	if !haveLBID {
+		return diag.Errorf("resourceLBFrontendBindUpdate: can't update LB frontend bind because LBID %d is not allowed or does not exist", d.Get("lb_id").(int))
+	}
 
 	urlValues.Add("frontendName", d.Get("frontend_name").(string))
 	urlValues.Add("bindingName", d.Get("name").(string))
@@ -141,7 +159,7 @@ func resourceLBFrontendBindEdit(ctx context.Context, d *schema.ResourceData, m i
 		urlValues.Add("bindingPort", strconv.Itoa(d.Get("port").(int)))
 	}
 
-	_, err := c.DecortAPICall(ctx, "POST", lbFrontendBindUpdateAPI, urlValues)
+	_, err = c.DecortAPICall(ctx, "POST", lbFrontendBindUpdateAPI, urlValues)
 	if err != nil {
 		return diag.FromErr(err)
 	}
@@ -155,7 +173,7 @@ func ResourceLBFrontendBind() *schema.Resource {
 
 		CreateContext: resourceLBFrontendBindCreate,
 		ReadContext:   resourceLBFrontendBindRead,
-		UpdateContext: resourceLBFrontendBindEdit,
+		UpdateContext: resourceLBFrontendBindUpdate,
 		DeleteContext: resourceLBFrontendBindDelete,
 
 		Importer: &schema.ResourceImporter{

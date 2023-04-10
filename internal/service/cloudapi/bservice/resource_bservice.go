@@ -42,6 +42,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/constants"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/controller"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/status"
 )
 
 func resourceBasicServiceCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
@@ -49,6 +50,15 @@ func resourceBasicServiceCreate(ctx context.Context, d *schema.ResourceData, m i
 
 	c := m.(*controller.ControllerCfg)
 	urlValues := &url.Values{}
+
+	haveRGID, err := existRGID(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	if !haveRGID {
+		return diag.Errorf("resourceBasicServiceCreate: can't create basic service because RGID %d is not allowed or does not exist", d.Get("rg_id").(int))
+	}
 
 	urlValues.Add("name", d.Get("service_name").(string))
 	urlValues.Add("rgId", strconv.Itoa(d.Get("rg_id").(int)))
@@ -65,8 +75,10 @@ func resourceBasicServiceCreate(ctx context.Context, d *schema.ResourceData, m i
 		return diag.FromErr(err)
 	}
 
+	serviceIdParsed, _ := strconv.Atoi(serviceId)
+
 	d.SetId(serviceId)
-	d.Set("service_id", serviceId)
+	d.Set("service_id", serviceIdParsed)
 
 	diagnostics := resourceBasicServiceRead(ctx, d, m)
 	if diagnostics != nil {
@@ -79,42 +91,55 @@ func resourceBasicServiceCreate(ctx context.Context, d *schema.ResourceData, m i
 func resourceBasicServiceRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	log.Debugf("resourceBasicServiceRead")
 
+	c := m.(*controller.ControllerCfg)
+
 	bs, err := utilityBasicServiceCheckPresence(ctx, d, m)
-	if bs == nil {
+	if err != nil {
 		d.SetId("")
 		return diag.FromErr(err)
 	}
 
-	d.Set("account_id", bs.AccountId)
-	d.Set("account_name", bs.AccountName)
-	d.Set("base_domain", bs.BaseDomain)
-	d.Set("computes", flattenBasicServiceComputes(bs.Computes))
-	d.Set("cpu_total", bs.CPUTotal)
-	d.Set("created_by", bs.CreatedBy)
-	d.Set("created_time", bs.CreatedTime)
-	d.Set("deleted_by", bs.DeletedBy)
-	d.Set("deleted_time", bs.DeletedTime)
-	d.Set("disk_total", bs.DiskTotal)
-	d.Set("gid", bs.GID)
-	d.Set("groups", bs.Groups)
-	d.Set("groups_name", bs.GroupsName)
-	d.Set("guid", bs.GUID)
-	d.Set("milestones", bs.Milestones)
-	d.Set("service_name", bs.Name)
-	d.Set("service_id", bs.ID)
-	d.Set("parent_srv_id", bs.ParentSrvId)
-	d.Set("parent_srv_type", bs.ParentSrvType)
-	d.Set("ram_total", bs.RamTotal)
-	d.Set("rg_id", bs.RGID)
-	d.Set("rg_name", bs.RGName)
-	d.Set("snapshots", flattenBasicServiceSnapshots(bs.Snapshots))
-	d.Set("ssh_key", bs.SSHKey)
-	d.Set("ssh_user", bs.SSHUser)
-	d.Set("status", bs.Status)
-	d.Set("tech_status", bs.TechStatus)
-	d.Set("updated_by", bs.UpdatedBy)
-	d.Set("updated_time", bs.UpdatedTime)
-	d.Set("user_managed", bs.UserManaged)
+	hasChanged := false
+
+	switch bs.Status {
+	case status.Modeled:
+		return diag.Errorf("The basic service is in status: %s, please, contact support for more information", bs.Status)
+	case status.Created:
+	case status.Enabled:
+	case status.Enabling:
+	case status.Disabled:
+		log.Debugf("The basic service is in status: %s, troubles can occur with the update. Please, enable bservice first.", bs.Status)
+	case status.Disabling:
+		log.Debugf("The basic service is in status: %s, troubles can occur with the update.", bs.Status)
+	case status.Deleted:
+		urlVal := &url.Values{}
+		urlVal.Add("serviceId", d.Id())
+
+		_, err := c.DecortAPICall(ctx, "POST", bserviceRestoreAPI, urlVal)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+
+		hasChanged = true
+	case status.Deleting:
+	case status.Destroyed:
+		d.SetId("")
+		return resourceBasicServiceCreate(ctx, d, m)
+	case status.Destroying:
+		return diag.Errorf("The basic service is in progress with status: %s", bs.Status)
+	case status.Restoring:
+	case status.Reconfiguring:
+	}
+
+	if hasChanged {
+		bs, err = utilityBasicServiceCheckPresence(ctx, d, m)
+		if err != nil {
+			d.SetId("")
+			return diag.FromErr(err)
+		}
+	}
+
+	flattenService(d, bs)
 
 	return nil
 }
@@ -144,9 +169,64 @@ func resourceBasicServiceDelete(ctx context.Context, d *schema.ResourceData, m i
 	return nil
 }
 
-func resourceBasicServiceEdit(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
+func resourceBasicServiceUpdate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	log.Debugf("resourceBasicServiceEdit")
 	c := m.(*controller.ControllerCfg)
+
+	haveRGID, err := existRGID(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	if !haveRGID {
+		return diag.Errorf("resourceBasicServiceUpdate: can't create basic service because RGID %d is not allowed or does not exist", d.Get("rg_id").(int))
+	}
+
+	bs, err := utilityBasicServiceCheckPresence(ctx, d, m)
+	if err != nil {
+		d.SetId("")
+		return diag.FromErr(err)
+	}
+
+	hasChanged := false
+
+	switch bs.Status {
+	case status.Modeled:
+		return diag.Errorf("The basic service is in status: %s, please, contact support for more information", bs.Status)
+	case status.Created:
+	case status.Enabled:
+	case status.Enabling:
+	case status.Disabled:
+		log.Debugf("The basic service is in status: %s, troubles can occur with the update. Please, enable bservice first.", bs.Status)
+	case status.Disabling:
+		log.Debugf("The basic service is in status: %s, troubles can occur with the update.", bs.Status)
+	case status.Deleted:
+		urlVal := &url.Values{}
+		urlVal.Add("serviceId", d.Id())
+
+		_, err := c.DecortAPICall(ctx, "POST", bserviceRestoreAPI, urlVal)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+
+		hasChanged = true
+	case status.Deleting:
+	case status.Destroyed:
+		d.SetId("")
+		return resourceBasicServiceCreate(ctx, d, m)
+	case status.Destroying:
+		return diag.Errorf("The basic service is in progress with status: %s", bs.Status)
+	case status.Restoring:
+	case status.Reconfiguring:
+	}
+
+	if hasChanged {
+		bs, err = utilityBasicServiceCheckPresence(ctx, d, m)
+		if err != nil {
+			d.SetId("")
+			return diag.FromErr(err)
+		}
+	}
 
 	urlValues := &url.Values{}
 	if d.HasChange("enable") {
@@ -508,7 +588,7 @@ func ResourceBasicService() *schema.Resource {
 
 		CreateContext: resourceBasicServiceCreate,
 		ReadContext:   resourceBasicServiceRead,
-		UpdateContext: resourceBasicServiceEdit,
+		UpdateContext: resourceBasicServiceUpdate,
 		DeleteContext: resourceBasicServiceDelete,
 
 		Importer: &schema.ResourceImporter{

@@ -82,7 +82,7 @@ The Provider will automatically install on your computer from the terrafrom regi
 3. Clone provider's repo:
 
 ```bash
-git clone https://repository.basistech.ru/BASIS/terraform-provider-decort.git
+git clone https://github.com/rudecs/terraform-provider-decort.git
 ```
 
 4. Change directory to clone provider's and execute next command

@@ -42,10 +42,38 @@ import (
 	log "github.com/sirupsen/logrus"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/constants"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/controller"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/status"
 )
 
 func resourceLBCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	log.Debugf("resourceLBCreate")
+
+	haveRGID, err := existRGID(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	if !haveRGID {
+		return diag.Errorf("resourceLBCreate: can't create LB because RGID %d is not allowed or does not exist", d.Get("rg_id").(int))
+	}
+
+	haveExtNetID, err := existExtNetID(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	if !haveExtNetID {
+		return diag.Errorf("resourceLBCreate: can't create LB because ExtNetID %d is not allowed or does not exist", d.Get("extnet_id").(int))
+	}
+
+	haveVins, err := existViNSID(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	if !haveVins {
+		return diag.Errorf("resourceLBCreate: can't create LB because ViNSID %d is not allowed or does not exist", d.Get("vins_id").(int))
+	}
 
 	c := m.(*controller.ControllerCfg)
 	urlValues := &url.Values{}
@@ -100,10 +128,55 @@ func resourceLBCreate(ctx context.Context, d *schema.ResourceData, m interface{}
 func resourceLBRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	log.Debugf("resourceLBRead")
 
+	c := m.(*controller.ControllerCfg)
+
 	lb, err := utilityLBCheckPresence(ctx, d, m)
 	if lb == nil {
 		d.SetId("")
 		return diag.FromErr(err)
+	}
+
+	hasChanged := false
+
+	switch lb.Status {
+	case status.Modeled:
+		return diag.Errorf("The LB is in status: %s, please, contact support for more information", lb.Status)
+	case status.Creating:
+	case status.Created:
+	case status.Deleting:
+	case status.Deleted:
+		urlValues := &url.Values{}
+		urlValues.Add("lbId", d.Id())
+
+		_, err := c.DecortAPICall(ctx, "POST", lbRestoreAPI, urlValues)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+		_, err = c.DecortAPICall(ctx, "POST", lbEnableAPI, urlValues)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+
+		hasChanged = true
+	case status.Destroying:
+		return diag.Errorf("The LB is in progress with status: %s", lb.Status)
+	case status.Destroyed:
+		d.SetId("")
+		return resourceLBCreate(ctx, d, m)
+	case status.Enabled:
+	case status.Enabling:
+	case status.Disabling:
+	case status.Disabled:
+		log.Debugf("The LB is in status: %s, troubles may occur with update. Please, enable LB first.", lb.Status)
+	case status.Restoring:
+	}
+
+	if hasChanged {
+		lb, err = utilityLBCheckPresence(ctx, d, m)
+		if err != nil {
+			d.SetId("")
+			return diag.FromErr(err)
+		}
 	}
 
 	d.Set("ha_mode", lb.HAMode)
@@ -163,10 +236,86 @@ func resourceLBDelete(ctx context.Context, d *schema.ResourceData, m interface{}
 	return nil
 }
 
-func resourceLBEdit(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
+func resourceLBUpdate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	log.Debugf("resourceLBEdit")
 	c := m.(*controller.ControllerCfg)
 	urlValues := &url.Values{}
+
+	haveRGID, err := existRGID(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	if !haveRGID {
+		return diag.Errorf("resourceLBUpdate: can't update LB because RGID %d is not allowed or does not exist", d.Get("rg_id").(int))
+	}
+
+	haveExtNetID, err := existExtNetID(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	if !haveExtNetID {
+		return diag.Errorf("resourceLBUpdate: can't update LB because ExtNetID %d is not allowed or does not exist", d.Get("extnet_id").(int))
+	}
+
+	haveVins, err := existViNSID(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	if !haveVins {
+		return diag.Errorf("resourceLBUpdate: can't update LB because ViNSID %d is not allowed or does not exist", d.Get("vins_id").(int))
+	}
+
+	lb, err := utilityLBCheckPresence(ctx, d, m)
+	if lb == nil {
+		d.SetId("")
+		return diag.FromErr(err)
+	}
+
+	hasChanged := false
+
+	switch lb.Status {
+	case status.Modeled:
+		return diag.Errorf("The LB is in status: %s, please, contact support for more information", lb.Status)
+	case status.Creating:
+	case status.Created:
+	case status.Deleting:
+	case status.Deleted:
+		urlValues := &url.Values{}
+		urlValues.Add("lbId", d.Id())
+
+		_, err := c.DecortAPICall(ctx, "POST", lbRestoreAPI, urlValues)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+		_, err = c.DecortAPICall(ctx, "POST", lbEnableAPI, urlValues)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+
+		hasChanged = true
+	case status.Destroying:
+		return diag.Errorf("The LB is in progress with status: %s", lb.Status)
+	case status.Destroyed:
+		d.SetId("")
+		return resourceLBCreate(ctx, d, m)
+	case status.Enabled:
+	case status.Enabling:
+	case status.Disabling:
+	case status.Disabled:
+		log.Debugf("The LB is in status: %s, troubles may occur with update. Please, enable LB first.", lb.Status)
+	case status.Restoring:
+	}
+
+	if hasChanged {
+		lb, err = utilityLBCheckPresence(ctx, d, m)
+		if err != nil {
+			d.SetId("")
+			return diag.FromErr(err)
+		}
+	}
 
 	if d.HasChange("enable") {
 		api := lbDisableAPI
@@ -262,7 +411,7 @@ func ResourceLB() *schema.Resource {
 
 		CreateContext: resourceLBCreate,
 		ReadContext:   resourceLBRead,
-		UpdateContext: resourceLBEdit,
+		UpdateContext: resourceLBUpdate,
 		DeleteContext: resourceLBDelete,
 
 		Importer: &schema.ResourceImporter{

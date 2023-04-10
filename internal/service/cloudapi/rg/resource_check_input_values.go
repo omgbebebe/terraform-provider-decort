@@ -74,6 +74,7 @@ func existAccountID(ctx context.Context, d *schema.ResourceData, m interface{}) 
 	}
 	return haveAccount, nil
 }
+
 func existGID(ctx context.Context, d *schema.ResourceData, m interface{}) (bool, error) {
 	c := m.(*controller.ControllerCfg)
 
@@ -107,6 +108,7 @@ func existGID(ctx context.Context, d *schema.ResourceData, m interface{}) (bool,
 
 	return haveGID, nil
 }
+
 func existExtNetID(ctx context.Context, d *schema.ResourceData, m interface{}) (bool, error) {
 	c := m.(*controller.ControllerCfg)
 

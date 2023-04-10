@@ -34,17 +34,16 @@ package disks
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
 
+	log "github.com/sirupsen/logrus"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/constants"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/controller"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/dc"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/status"
-	log "github.com/sirupsen/logrus"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -55,10 +54,26 @@ func resourceDiskCreate(ctx context.Context, d *schema.ResourceData, m interface
 	c := m.(*controller.ControllerCfg)
 	urlValues := &url.Values{}
 
-	urlValues.Add("accountId", fmt.Sprintf("%d", d.Get("account_id").(int)))
-	urlValues.Add("gid", fmt.Sprintf("%d", d.Get("gid").(int)))
+	haveAccount, err := existAccountID(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+	if !haveAccount {
+		return diag.Errorf("resourceDiskCreate: can't create Disk because AccountID %d is not allowed or does not exist", d.Get("account_id").(int))
+	}
+
+	haveGID, err := existGID(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+	if !haveGID {
+		return diag.Errorf("resourceDiskCreate: can't create Disk because GID %d is not allowed or does not exist", d.Get("gid").(int))
+	}
+
+	urlValues.Add("accountId", strconv.Itoa(d.Get("account_id").(int)))
+	urlValues.Add("gid", strconv.Itoa(d.Get("gid").(int)))
 	urlValues.Add("name", d.Get("disk_name").(string))
-	urlValues.Add("size", fmt.Sprintf("%d", d.Get("size_max").(int)))
+	urlValues.Add("size", strconv.Itoa(d.Get("size_max").(int)))
 	if typeRaw, ok := d.GetOk("type"); ok {
 		urlValues.Add("type", strings.ToUpper(typeRaw.(string)))
 	} else {
@@ -85,7 +100,7 @@ func resourceDiskCreate(ctx context.Context, d *schema.ResourceData, m interface
 
 	urlValues = &url.Values{}
 
-	d.SetId(diskId) // update ID of the resource to tell Terraform that the disk resource exists
+	d.SetId(diskId)
 
 	if iotuneRaw, ok := d.GetOk("iotune"); ok {
 		iot := iotuneRaw.([]interface{})[0]
@@ -136,19 +151,18 @@ func resourceDiskRead(ctx context.Context, d *schema.ResourceData, m interface{}
 	warnings := dc.Warnings{}
 
 	disk, err := utilityDiskCheckPresence(ctx, d, m)
-	if disk == nil {
+	if err != nil {
 		d.SetId("")
-		if err != nil {
-			return diag.FromErr(err)
-		}
-		return nil
+		return diag.FromErr(err)
 	}
 
 	hasChangeState := false
-	if disk.Status == status.Destroyed || disk.Status == status.Purged {
+
+	switch disk.Status {
+	case status.Destroyed, status.Purged:
 		d.Set("disk_id", 0)
 		return resourceDiskCreate(ctx, d, m)
-	} else if disk.Status == status.Deleted {
+	case status.Deleted:
 		hasChangeState = true
 		urlValues.Add("diskId", d.Id())
 		urlValues.Add("reason", d.Get("reason").(string))
@@ -157,79 +171,84 @@ func resourceDiskRead(ctx context.Context, d *schema.ResourceData, m interface{}
 		if err != nil {
 			warnings.Add(err)
 		}
+	case status.Assigned:
+	case status.Modeled:
+		return diag.Errorf("The disk is in status: %s, please, contact support for more information", disk.Status)
+	case status.Creating:
+	case status.Created:
+	case status.Allocated:
+	case status.Unallocated:
 	}
+
 	if hasChangeState {
-		urlValues = &url.Values{}
 		disk, err = utilityDiskCheckPresence(ctx, d, m)
-		if disk == nil {
+		if err != nil {
 			d.SetId("")
-			if err != nil {
-				return diag.FromErr(err)
-			}
-			return nil
+			return diag.FromErr(err)
 		}
 	}
 
-	diskAcl, _ := json.Marshal(disk.Acl)
-
-	d.Set("account_id", disk.AccountID)
-	d.Set("account_name", disk.AccountName)
-	d.Set("acl", string(diskAcl))
-	d.Set("boot_partition", disk.BootPartition)
-	d.Set("computes", flattenDiskComputes(disk.Computes))
-	d.Set("created_time", disk.CreatedTime)
-	d.Set("deleted_time", disk.DeletedTime)
-	d.Set("desc", disk.Desc)
-	d.Set("destruction_time", disk.DestructionTime)
-	d.Set("devicename", disk.DeviceName)
-	d.Set("disk_path", disk.DiskPath)
-	d.Set("gid", disk.GridID)
-	d.Set("guid", disk.GUID)
-	d.Set("disk_id", disk.ID)
-	d.Set("image_id", disk.ImageID)
-	d.Set("images", disk.Images)
-	d.Set("iotune", flattenIOTune(disk.IOTune))
-	d.Set("iqn", disk.IQN)
-	d.Set("login", disk.Login)
-	d.Set("milestones", disk.Milestones)
-	d.Set("disk_name", disk.Name)
-	d.Set("order", disk.Order)
-	d.Set("params", disk.Params)
-	d.Set("parent_id", disk.ParentId)
-	d.Set("passwd", disk.Passwd)
-	d.Set("pci_slot", disk.PciSlot)
-	d.Set("pool", disk.Pool)
-	d.Set("present_to", disk.PresentTo)
-	d.Set("purge_attempts", disk.PurgeAttempts)
-	d.Set("purge_time", disk.PurgeTime)
-	d.Set("reality_device_number", disk.RealityDeviceNumber)
-	d.Set("reference_id", disk.ReferenceId)
-	d.Set("res_id", disk.ResID)
-	d.Set("res_name", disk.ResName)
-	d.Set("role", disk.Role)
-	d.Set("sep_id", disk.SepID)
-	d.Set("sep_type", disk.SepType)
-	d.Set("size_max", disk.SizeMax)
-	d.Set("size_used", disk.SizeUsed)
-	d.Set("shareable", disk.Shareable)
-	d.Set("snapshots", flattenDiskSnapshotList(disk.Snapshots))
-	d.Set("status", disk.Status)
-	d.Set("tech_status", disk.TechStatus)
-	d.Set("type", disk.Type)
-	d.Set("vmid", disk.VMID)
+	flattenDisk(d, *disk)
 
 	return warnings.Get()
 }
 
 func resourceDiskUpdate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	c := m.(*controller.ControllerCfg)
+	warnings := dc.Warnings{}
 	urlValues := &url.Values{}
+
+	haveAccount, err := existAccountID(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+	if !haveAccount {
+		return diag.Errorf("resourceDiskUpdate: can't update Disk because AccountID %d is not allowed or does not exist", d.Get("account_id").(int))
+	}
+
+	haveGID, err := existGID(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+	if !haveGID {
+		return diag.Errorf("resourceDiskUpdate: can't update Disk because GID %d is not allowed or does not exist", d.Get("gid").(int))
+	}
+
 	disk, err := utilityDiskCheckPresence(ctx, d, m)
-	if disk == nil {
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	hasChangeState := false
+
+	switch disk.Status {
+	case status.Destroyed, status.Purged:
+		d.Set("disk_id", 0)
+		return resourceDiskCreate(ctx, d, m)
+	case status.Deleted:
+		hasChangeState = true
+		urlValues.Add("diskId", d.Id())
+		urlValues.Add("reason", d.Get("reason").(string))
+
+		_, err := c.DecortAPICall(ctx, "POST", disksRestoreAPI, urlValues)
 		if err != nil {
+			warnings.Add(err)
+		}
+	case status.Assigned:
+	case status.Modeled:
+		return diag.Errorf("The disk is in status: %s, please, contact support for more information", disk.Status)
+	case status.Creating:
+	case status.Created:
+	case status.Allocated:
+	case status.Unallocated:
+	}
+
+	if hasChangeState {
+		disk, err = utilityDiskCheckPresence(ctx, d, m)
+		if err != nil {
+			d.SetId("")
 			return diag.FromErr(err)
 		}
-		return nil
 	}
 
 	if d.HasChange("size_max") {
@@ -238,7 +257,7 @@ func resourceDiskUpdate(ctx context.Context, d *schema.ResourceData, m interface
 			log.Debugf("resourceDiskUpdate: resizing disk ID %s - %d GB -> %d GB",
 				d.Id(), oldSize.(int), newSize.(int))
 			urlValues.Add("diskId", d.Id())
-			urlValues.Add("size", fmt.Sprintf("%d", newSize.(int)))
+			urlValues.Add("size", strconv.Itoa(newSize.(int)))
 			_, err := c.DecortAPICall(ctx, "POST", disksResizeAPI, urlValues)
 			if err != nil {
 				return diag.FromErr(err)
@@ -310,11 +329,9 @@ func resourceDiskUpdate(ctx context.Context, d *schema.ResourceData, m interface
 
 func resourceDiskDelete(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	disk, err := utilityDiskCheckPresence(ctx, d, m)
-	if disk == nil {
-		if err != nil {
-			return diag.FromErr(err)
-		}
-		return nil
+	if err != nil {
+		d.SetId("")
+		return diag.FromErr(err)
 	}
 	if disk.Status == status.Destroyed || disk.Status == status.Purged {
 		return nil
@@ -363,13 +380,6 @@ func resourceDiskSchemaMake() map[string]*schema.Schema {
 			Computed:    true,
 			Description: "Pool for disk location",
 		},
-		"present_to": {
-			Type:     schema.TypeList,
-			Computed: true,
-			Elem: &schema.Schema{
-				Type: schema.TypeInt,
-			},
-		},
 		"sep_id": {
 			Type:        schema.TypeInt,
 			Optional:    true,
@@ -411,85 +421,6 @@ func resourceDiskSchemaMake() map[string]*schema.Schema {
 			Type:     schema.TypeBool,
 			Optional: true,
 			Computed: true,
-		},
-
-		"disk_id": {
-			Type:        schema.TypeInt,
-			Computed:    true,
-			Description: "Disk ID. Duplicates the value of the ID parameter",
-		},
-		"account_name": {
-			Type:        schema.TypeString,
-			Computed:    true,
-			Description: "The name of the subscriber '(account') to whom this disk belongs",
-		},
-		"acl": {
-			Type:     schema.TypeString,
-			Computed: true,
-		},
-		"boot_partition": {
-			Type:        schema.TypeInt,
-			Computed:    true,
-			Description: "Number of disk partitions",
-		},
-		"computes": {
-			Type:     schema.TypeList,
-			Computed: true,
-			Elem: &schema.Resource{
-				Schema: map[string]*schema.Schema{
-					"compute_id": {
-						Type:     schema.TypeString,
-						Computed: true,
-					},
-					"compute_name": {
-						Type:     schema.TypeString,
-						Computed: true,
-					},
-				},
-			},
-		},
-		"created_time": {
-			Type:        schema.TypeInt,
-			Computed:    true,
-			Description: "Created time",
-		},
-		"deleted_time": {
-			Type:        schema.TypeInt,
-			Computed:    true,
-			Description: "Deleted time",
-		},
-		"destruction_time": {
-			Type:        schema.TypeInt,
-			Computed:    true,
-			Description: "Time of final deletion",
-		},
-		"devicename": {
-			Type:        schema.TypeString,
-			Computed:    true,
-			Description: "Name of the device",
-		},
-		"disk_path": {
-			Type:        schema.TypeString,
-			Computed:    true,
-			Description: "Disk path",
-		},
-		"guid": {
-			Type:        schema.TypeInt,
-			Computed:    true,
-			Description: "Disk ID on the storage side",
-		},
-		"image_id": {
-			Type:        schema.TypeInt,
-			Computed:    true,
-			Description: "Image ID",
-		},
-		"images": {
-			Type:     schema.TypeList,
-			Computed: true,
-			Elem: &schema.Schema{
-				Type: schema.TypeString,
-			},
-			Description: "IDs of images using the disk",
 		},
 		"iotune": {
 			Type:     schema.TypeList,
@@ -578,6 +509,91 @@ func resourceDiskSchemaMake() map[string]*schema.Schema {
 					},
 				},
 			},
+		},
+		"present_to": {
+			Type:     schema.TypeList,
+			Computed: true,
+			Elem: &schema.Schema{
+				Type: schema.TypeInt,
+			},
+		},
+		"disk_id": {
+			Type:        schema.TypeInt,
+			Computed:    true,
+			Description: "Disk ID. Duplicates the value of the ID parameter",
+		},
+		"account_name": {
+			Type:        schema.TypeString,
+			Computed:    true,
+			Description: "The name of the subscriber '(account') to whom this disk belongs",
+		},
+		"acl": {
+			Type:     schema.TypeString,
+			Computed: true,
+		},
+		"boot_partition": {
+			Type:        schema.TypeInt,
+			Computed:    true,
+			Description: "Number of disk partitions",
+		},
+		"computes": {
+			Type:     schema.TypeList,
+			Computed: true,
+			Elem: &schema.Resource{
+				Schema: map[string]*schema.Schema{
+					"compute_id": {
+						Type:     schema.TypeString,
+						Computed: true,
+					},
+					"compute_name": {
+						Type:     schema.TypeString,
+						Computed: true,
+					},
+				},
+			},
+		},
+		"created_time": {
+			Type:        schema.TypeInt,
+			Computed:    true,
+			Description: "Created time",
+		},
+		"deleted_time": {
+			Type:        schema.TypeInt,
+			Computed:    true,
+			Description: "Deleted time",
+		},
+		"destruction_time": {
+			Type:        schema.TypeInt,
+			Computed:    true,
+			Description: "Time of final deletion",
+		},
+		"devicename": {
+			Type:        schema.TypeString,
+			Computed:    true,
+			Description: "Name of the device",
+		},
+		"disk_path": {
+			Type:        schema.TypeString,
+			Computed:    true,
+			Description: "Disk path",
+		},
+		"guid": {
+			Type:        schema.TypeInt,
+			Computed:    true,
+			Description: "Disk ID on the storage side",
+		},
+		"image_id": {
+			Type:        schema.TypeInt,
+			Computed:    true,
+			Description: "Image ID",
+		},
+		"images": {
+			Type:     schema.TypeList,
+			Computed: true,
+			Elem: &schema.Schema{
+				Type: schema.TypeString,
+			},
+			Description: "IDs of images using the disk",
 		},
 		"iqn": {
 			Type:        schema.TypeString,

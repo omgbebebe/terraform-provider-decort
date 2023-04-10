@@ -38,11 +38,11 @@ import (
 	"net/url"
 	"strconv"
 
+	log "github.com/sirupsen/logrus"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/constants"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/controller"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/dc"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/status"
-	log "github.com/sirupsen/logrus"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -52,6 +52,50 @@ import (
 func resourceVinsCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	c := m.(*controller.ControllerCfg)
 	urlValues := &url.Values{}
+
+	if _, ok := d.GetOk("rg_id"); ok {
+		haveRGID, err := existRGID(ctx, d, m)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+
+		if !haveRGID {
+			return diag.Errorf("resourceVinsCreate: can't create ViNS because RGID %d is not allowed or does not exist", d.Get("rg_id").(int))
+		}
+	}
+
+	if _, ok := d.GetOk("ext_net_id"); ok {
+		haveExtNetID, err := existExtNetID(ctx, d, m)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+
+		if !haveExtNetID {
+			return diag.Errorf("resourceVinsCreate: can't create ViNS because ExtNetID %d is not allowed or does not exist", d.Get("ext_net_id").(int))
+		}
+	}
+
+	if _, ok := d.GetOk("account_id"); ok {
+		haveAccountID, err := existAccountID(ctx, d, m)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+
+		if !haveAccountID {
+			return diag.Errorf("resourceVinsCreate: can't create ViNS because AccountID %d is not allowed or does not exist", d.Get("account_id").(int))
+		}
+	}
+
+	if _, ok := d.GetOk("gid"); ok {
+		haveGID, err := existGID(ctx, d, m)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+
+		if !haveGID {
+			return diag.Errorf("resourceVinsCreate: can't create ViNS because GID %d is not allowed or does not exist", d.Get("gid").(int))
+		}
+	}
 
 	rgId, rgOk := d.GetOk("rg_id")
 	accountId, accountIdOk := d.GetOk("account_id")
@@ -164,7 +208,6 @@ func resourceVinsCreate(ctx context.Context, d *schema.ResourceData, m interface
 
 func resourceVinsRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	c := m.(*controller.ControllerCfg)
-	urlValues := &url.Values{}
 	warnings := dc.Warnings{}
 
 	vins, err := utilityVinsCheckPresence(ctx, d, m)
@@ -173,40 +216,58 @@ func resourceVinsRead(ctx context.Context, d *schema.ResourceData, m interface{}
 		return diag.FromErr(err)
 	}
 
+	isEnabled := d.Get("enable").(bool)
+
 	hasChangeState := false
-	if vins.Status == status.Destroyed {
+
+	switch vins.Status {
+	case status.Destroyed:
 		d.SetId("")
 		d.Set("vins_id", 0)
 		return resourceVinsCreate(ctx, d, m)
-	} else if vins.Status == status.Deleted {
+	case status.Deleted:
 		hasChangeState = true
+		urlValues := &url.Values{}
 
 		urlValues.Add("vinsId", d.Id())
+
 		_, err := c.DecortAPICall(ctx, "POST", VinsRestoreAPI, urlValues)
 		if err != nil {
 			warnings.Add(err)
 		}
-	}
-	urlValues = &url.Values{}
+	case status.Modeled:
+		return diag.Errorf("ViNS are in status: %s, please, contact support for more information", vins.Status)
+	case status.Created:
+	case status.Enabled:
+		if !isEnabled {
+			hasChangeState = true
+			urlValues := &url.Values{}
 
-	isEnabled := d.Get("enable").(bool)
-	if vins.Status == status.Disabled && isEnabled {
-		hasChangeState = true
+			urlValues.Add("vinsId", d.Id())
 
-		urlValues.Add("vinsId", d.Id())
-		_, err := c.DecortAPICall(ctx, "POST", VinsEnableAPI, urlValues)
-		if err != nil {
-			warnings.Add(err)
+			_, err := c.DecortAPICall(ctx, "POST", VinsDisableAPI, urlValues)
+			if err != nil {
+				warnings.Add(err)
+			}
 		}
-	} else if vins.Status == status.Enabled && !isEnabled {
-		hasChangeState = true
+	case status.Enabling:
+	case status.Disabled:
+		if isEnabled {
+			hasChangeState = true
+			urlValues := &url.Values{}
 
-		urlValues.Add("vinsId", d.Id())
-		_, err := c.DecortAPICall(ctx, "POST", VinsDisableAPI, urlValues)
-		if err != nil {
-			warnings.Add(err)
+			urlValues.Add("vinsId", d.Id())
+
+			_, err := c.DecortAPICall(ctx, "POST", VinsEnableAPI, urlValues)
+			if err != nil {
+				warnings.Add(err)
+			}
 		}
+	case status.Disabling:
+	case status.Deleting:
+		return diag.Errorf("ViNS are in progress with status: %s", vins.Status)
 	}
+
 	if hasChangeState {
 		vins, err = utilityVinsCheckPresence(ctx, d, m)
 		if err != nil {
@@ -216,6 +277,7 @@ func resourceVinsRead(ctx context.Context, d *schema.ResourceData, m interface{}
 	}
 
 	flattenVins(d, *vins)
+
 	return warnings.Get()
 }
 
@@ -245,18 +307,131 @@ func isContinsNatRule(els []interface{}, el interface{}) bool {
 
 func resourceVinsUpdate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	c := m.(*controller.ControllerCfg)
-	urlValues := &url.Values{}
 	warnings := dc.Warnings{}
+
+	if _, ok := d.GetOk("rg_id"); ok {
+		haveRGID, err := existRGID(ctx, d, m)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+
+		if !haveRGID {
+			return diag.Errorf("resourceVinsUpdate: can't update ViNS because RGID %d is not allowed or does not exist", d.Get("rg_id").(int))
+		}
+	}
+
+	if _, ok := d.GetOk("ext_net_id"); ok {
+		haveExtNetID, err := existExtNetID(ctx, d, m)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+
+		if !haveExtNetID {
+			return diag.Errorf("resourceVinsUpdate: can't update ViNS because ExtNetID %d is not allowed or does not exist", d.Get("ext_net_id").(int))
+		}
+	}
+
+	if _, ok := d.GetOk("account_id"); ok {
+		haveAccountID, err := existAccountID(ctx, d, m)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+
+		if !haveAccountID {
+			return diag.Errorf("resourceVinsUpdate: can't update ViNS because AccountID %d is not allowed or does not exist", d.Get("account_id").(int))
+		}
+	}
+
+	if _, ok := d.GetOk("gid"); ok {
+		haveGID, err := existGID(ctx, d, m)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+
+		if !haveGID {
+			return diag.Errorf("resourceVinsUpdate: can't update ViNS because GID %d is not allowed or does not exist", d.Get("gid").(int))
+		}
+	}
+
+	vins, err := utilityVinsCheckPresence(ctx, d, m)
+	if err != nil {
+		d.SetId("")
+		return diag.FromErr(err)
+	}
+
+	isEnabled := d.Get("enable").(bool)
+
+	hasChangeState := false
+
+	switch vins.Status {
+	case status.Destroyed:
+		d.SetId("")
+		return resourceVinsCreate(ctx, d, m)
+	case status.Deleted:
+		hasChangeState = true
+		urlValues := &url.Values{}
+
+		urlValues.Add("vinsId", d.Id())
+
+		_, err := c.DecortAPICall(ctx, "POST", VinsRestoreAPI, urlValues)
+		if err != nil {
+			warnings.Add(err)
+		}
+	case status.Modeled:
+		return diag.Errorf("ViNS are in status: %s, please, contact support for more information", vins.Status)
+	case status.Created:
+	case status.Enabled:
+		if !isEnabled {
+			hasChangeState = true
+			urlValues := &url.Values{}
+
+			urlValues.Add("vinsId", d.Id())
+
+			_, err := c.DecortAPICall(ctx, "POST", VinsDisableAPI, urlValues)
+			if err != nil {
+				warnings.Add(err)
+			}
+		}
+	case status.Enabling:
+	case status.Disabled:
+		if isEnabled {
+			hasChangeState = true
+			urlValues := &url.Values{}
+
+			urlValues.Add("vinsId", d.Id())
+
+			_, err := c.DecortAPICall(ctx, "POST", VinsEnableAPI, urlValues)
+			if err != nil {
+				warnings.Add(err)
+			}
+		}
+	case status.Disabling:
+	case status.Deleting:
+		return diag.Errorf("ViNS are in progress with status: %s", vins.Status)
+	}
+
+	if hasChangeState {
+		vins, err = utilityVinsCheckPresence(ctx, d, m)
+		if err != nil {
+			d.SetId("")
+			return diag.FromErr(err)
+		}
+	}
+	urlValues := &url.Values{}
 
 	enableOld, enableNew := d.GetChange("enable")
 	if enableOld.(bool) && !enableNew.(bool) {
-		urlValues.Add("vinsId", d.Id())
+		if !urlValues.Has("vinsId") {
+			urlValues.Add("vinsId", d.Id())
+		}
 		_, err := c.DecortAPICall(ctx, "POST", VinsDisableAPI, urlValues)
 		if err != nil {
 			warnings.Add(err)
 		}
 	} else if !enableOld.(bool) && enableNew.(bool) {
-		urlValues.Add("vinsId", d.Id())
+		if !urlValues.Has("vinsId") {
+			urlValues.Add("vinsId", d.Id())
+		}
 		_, err := c.DecortAPICall(ctx, "POST", VinsEnableAPI, urlValues)
 		if err != nil {
 			warnings.Add(err)
@@ -532,6 +707,7 @@ func resourceVinsSchemaMake() map[string]*schema.Schema {
 	}
 	rets["rg_id"] = &schema.Schema{
 		Type:     schema.TypeInt,
+		Computed: true,
 		Optional: true,
 	}
 	rets["account_id"] = &schema.Schema{

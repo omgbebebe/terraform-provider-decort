@@ -43,14 +43,44 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	log "github.com/sirupsen/logrus"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/constants"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/controller"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudapi/kvmvm"
-	log "github.com/sirupsen/logrus"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/status"
 )
 
 func resourceK8sCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	log.Debugf("resourceK8sCreate: called with name %s, rg %d", d.Get("name").(string), d.Get("rg_id").(int))
+
+	haveRGID, err := existRGID(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	if !haveRGID {
+		return diag.Errorf("resourceK8sCreate: can't create k8s cluster because RGID %d is not allowed or does not exist", d.Get("rg_id").(int))
+	}
+
+	haveK8sciID, err := existK8sCIID(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	if !haveK8sciID {
+		return diag.Errorf("resourceK8sCreate: can't create k8s cluster because K8sCIID %d is not allowed or does not exist", d.Get("k8sci_id").(int))
+	}
+
+	if _, ok := d.GetOk("extnet_id"); ok {
+		haveExtNetID, err := existExtNetID(ctx, d, m)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+
+		if !haveExtNetID {
+			return diag.Errorf("resourceK8sCreate: can't create k8s cluster because ExtNetID %d is not allowed or does not exist", d.Get("extnet_id").(int))
+		}
+	}
 
 	c := m.(*controller.ControllerCfg)
 	urlValues := &url.Values{}
@@ -158,12 +188,61 @@ func resourceK8sCreate(ctx context.Context, d *schema.ResourceData, m interface{
 }
 
 func resourceK8sRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-
-	k8s, err := utilityDataK8sCheckPresence(ctx, d, m)
+	k8s, err := utilityK8sCheckPresence(ctx, d, m)
 	if err != nil {
 		d.SetId("")
 		return diag.FromErr(err)
 	}
+
+	c := m.(*controller.ControllerCfg)
+
+	hasChanged := false
+
+	switch k8s.Status {
+	case status.Modeled:
+		return diag.Errorf("The k8s cluster is in status: %s, please, contact support for more information", k8s.Status)
+	case status.Creating:
+	case status.Created:
+	case status.Deleting:
+	case status.Deleted:
+		urlVal := &url.Values{}
+		urlVal.Add("k8sId", d.Id())
+
+		_, err := c.DecortAPICall(ctx, "POST", K8sRestoreAPI, urlVal)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+
+		_, err = c.DecortAPICall(ctx, "POST", K8sEnableAPI, urlVal)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+
+		hasChanged = true
+	case status.Destroying:
+		return diag.Errorf("The k8s cluster is in progress with status: %s", k8s.Status)
+	case status.Destroyed:
+		d.SetId("")
+		return resourceK8sCreate(ctx, d, m)
+	case status.Enabling:
+	case status.Enabled:
+	case status.Disabling:
+	case status.Disabled:
+		log.Debugf("The k8s cluster is in status: %s, troubles may occur with update. Please, enable compute first.", k8s.Status)
+	case status.Restoring:
+	}
+
+	if hasChanged {
+		k8s, err = utilityK8sCheckPresence(ctx, d, m)
+		if k8s == nil {
+			d.SetId("")
+			if err != nil {
+				return diag.FromErr(err)
+			}
+			return nil
+		}
+	}
+
 	k8sList, err := utilityK8sListCheckPresence(ctx, d, m, K8sListAPI)
 	if err != nil {
 		d.SetId("")
@@ -201,7 +280,6 @@ func resourceK8sRead(ctx context.Context, d *schema.ResourceData, m interface{})
 
 	flattenResourceK8s(d, *k8s, masterComputeList, workersComputeList)
 
-	c := m.(*controller.ControllerCfg)
 	urlValues := &url.Values{}
 	urlValues.Add("lbId", strconv.FormatUint(k8s.LBID, 10))
 
@@ -233,6 +311,76 @@ func resourceK8sUpdate(ctx context.Context, d *schema.ResourceData, m interface{
 
 	c := m.(*controller.ControllerCfg)
 
+	haveRGID, err := existRGID(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	if !haveRGID {
+		return diag.Errorf("resourceK8sUpdate: can't update k8s cluster because RGID %d is not allowed or does not exist", d.Get("rg_id").(int))
+	}
+
+	haveK8sciID, err := existK8sCIID(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	if !haveK8sciID {
+		return diag.Errorf("resourceK8sUpdate: can't update k8s cluster because K8sCIID %d is not allowed or does not exist", d.Get("k8sci_id").(int))
+	}
+
+	k8s, err := utilityK8sCheckPresence(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	hasChanged := false
+
+	switch k8s.Status {
+	case status.Modeled:
+		return diag.Errorf("The k8s cluster is in status: %s, please, contact support for more information", k8s.Status)
+	case status.Creating:
+	case status.Created:
+	case status.Deleting:
+	case status.Deleted:
+		urlVal := &url.Values{}
+		urlVal.Add("k8sId", d.Id())
+
+		_, err := c.DecortAPICall(ctx, "POST", K8sRestoreAPI, urlVal)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+
+		_, err = c.DecortAPICall(ctx, "POST", K8sEnableAPI, urlVal)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+
+		hasChanged = true
+	case status.Destroying:
+		return diag.Errorf("The k8s cluster is in progress with status: %s", k8s.Status)
+	case status.Destroyed:
+		d.SetId("")
+		return resourceK8sCreate(ctx, d, m)
+	case status.Enabling:
+	case status.Enabled:
+	case status.Disabling:
+	case status.Disabled:
+		log.Debugf("The k8s cluster is in status: %s, troubles may occur with update. Please, enable compute first.", k8s.Status)
+	case status.Restoring:
+	}
+
+	if hasChanged {
+		k8s, err = utilityK8sCheckPresence(ctx, d, m)
+		if k8s == nil {
+			d.SetId("")
+			if err != nil {
+				return diag.FromErr(err)
+			}
+			return nil
+		}
+	}
+
 	if d.HasChange("name") {
 		urlValues := &url.Values{}
 		urlValues.Add("k8sId", d.Id())
@@ -245,11 +393,6 @@ func resourceK8sUpdate(ctx context.Context, d *schema.ResourceData, m interface{
 	}
 
 	if d.HasChange("workers") {
-		k8s, err := utilityK8sCheckPresence(ctx, d, m)
-		if err != nil {
-			return diag.FromErr(err)
-		}
-
 		wg := k8s.K8SGroups.Workers[0]
 		urlValues := &url.Values{}
 		urlValues.Add("k8sId", d.Id())
@@ -321,7 +464,6 @@ func resourceK8sSchemaMake() map[string]*schema.Schema {
 		"wg_name": {
 			Type:        schema.TypeString,
 			Required:    true,
-			ForceNew:    true,
 			Description: "Name for first worker group created with cluster.",
 		},
 		"labels": {
@@ -369,7 +511,6 @@ func resourceK8sSchemaMake() map[string]*schema.Schema {
 		"with_lb": {
 			Type:        schema.TypeBool,
 			Optional:    true,
-			ForceNew:    true,
 			Default:     true,
 			Description: "Create k8s with load balancer if true.",
 		},

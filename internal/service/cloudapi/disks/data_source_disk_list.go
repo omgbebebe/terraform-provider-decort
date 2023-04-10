@@ -34,124 +34,12 @@ package disks
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/constants"
 )
-
-func flattenDiskComputes(computes map[string]string) []map[string]interface{} {
-	res := make([]map[string]interface{}, 0)
-	for computeKey, computeVal := range computes {
-		temp := map[string]interface{}{
-			"compute_id":   computeKey,
-			"compute_name": computeVal,
-		}
-		res = append(res, temp)
-	}
-	return res
-}
-
-func flattenIOTune(iot IOTune) []map[string]interface{} {
-	res := make([]map[string]interface{}, 0)
-	temp := map[string]interface{}{
-		"read_bytes_sec":      iot.ReadBytesSec,
-		"read_bytes_sec_max":  iot.ReadBytesSecMax,
-		"read_iops_sec":       iot.ReadIopsSec,
-		"read_iops_sec_max":   iot.ReadIopsSecMax,
-		"size_iops_sec":       iot.SizeIopsSec,
-		"total_bytes_sec":     iot.TotalBytesSec,
-		"total_bytes_sec_max": iot.TotalBytesSecMax,
-		"total_iops_sec":      iot.TotalIopsSec,
-		"total_iops_sec_max":  iot.TotalIopsSecMax,
-		"write_bytes_sec":     iot.WriteBytesSec,
-		"write_bytes_sec_max": iot.WriteBytesSecMax,
-		"write_iops_sec":      iot.WriteIopsSec,
-		"write_iops_sec_max":  iot.WriteIopsSecMax,
-	}
-
-	res = append(res, temp)
-	return res
-}
-
-func flattenDiskList(dl DisksList) []map[string]interface{} {
-	res := make([]map[string]interface{}, 0)
-	for _, disk := range dl {
-		diskAcl, _ := json.Marshal(disk.Acl)
-		temp := map[string]interface{}{
-			"account_id":            disk.AccountID,
-			"account_name":          disk.AccountName,
-			"acl":                   string(diskAcl),
-			"computes":              flattenDiskComputes(disk.Computes),
-			"boot_partition":        disk.BootPartition,
-			"created_time":          disk.CreatedTime,
-			"deleted_time":          disk.DeletedTime,
-			"desc":                  disk.Desc,
-			"destruction_time":      disk.DestructionTime,
-			"devicename":            disk.DeviceName,
-			"disk_path":             disk.DiskPath,
-			"gid":                   disk.GridID,
-			"guid":                  disk.GUID,
-			"disk_id":               disk.ID,
-			"image_id":              disk.ImageID,
-			"images":                disk.Images,
-			"iotune":                flattenIOTune(disk.IOTune),
-			"iqn":                   disk.IQN,
-			"login":                 disk.Login,
-			"machine_id":            disk.MachineId,
-			"machine_name":          disk.MachineName,
-			"milestones":            disk.Milestones,
-			"disk_name":             disk.Name,
-			"order":                 disk.Order,
-			"params":                disk.Params,
-			"parent_id":             disk.ParentId,
-			"passwd":                disk.Passwd,
-			"pci_slot":              disk.PciSlot,
-			"pool":                  disk.Pool,
-			"present_to":            disk.PresentTo,
-			"purge_attempts":        disk.PurgeAttempts,
-			"purge_time":            disk.PurgeTime,
-			"reality_device_number": disk.RealityDeviceNumber,
-			"reference_id":          disk.ReferenceId,
-			"res_id":                disk.ResID,
-			"res_name":              disk.ResName,
-			"role":                  disk.Role,
-			"sep_id":                disk.SepID,
-			"sep_type":              disk.SepType,
-			"shareable":             disk.Shareable,
-			"size_max":              disk.SizeMax,
-			"size_used":             disk.SizeUsed,
-			"snapshots":             flattenDiskSnapshotList(disk.Snapshots),
-			"status":                disk.Status,
-			"tech_status":           disk.TechStatus,
-			"type":                  disk.Type,
-			"vmid":                  disk.VMID,
-		}
-		res = append(res, temp)
-	}
-	return res
-
-}
-
-func flattenDiskSnapshotList(sl SnapshotList) []interface{} {
-	res := make([]interface{}, 0)
-	for _, snapshot := range sl {
-		temp := map[string]interface{}{
-			"guid":          snapshot.Guid,
-			"label":         snapshot.Label,
-			"res_id":        snapshot.ResId,
-			"snap_set_guid": snapshot.SnapSetGuid,
-			"snap_set_time": snapshot.SnapSetTime,
-			"timestamp":     snapshot.TimeStamp,
-		}
-		res = append(res, temp)
-	}
-
-	return res
-
-}
 
 func dataSourceDiskListRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	diskList, err := utilityDiskListCheckPresence(ctx, d, m, disksListAPI)

@@ -40,14 +40,23 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	log "github.com/sirupsen/logrus"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/constants"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/controller"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudapi/kvmvm"
-	log "github.com/sirupsen/logrus"
 )
 
 func resourceK8sWgCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	log.Debugf("resourceK8sWgCreate: called with k8s id %d", d.Get("k8s_id").(int))
+
+	haveK8sID, err := existK8sID(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	if !haveK8sID {
+		return diag.Errorf("resourceK8sCreate: can't create k8s cluster because K8sID %d is not allowed or does not exist", d.Get("k8s_id").(int))
+	}
 
 	c := m.(*controller.ControllerCfg)
 	urlValues := &url.Values{}
@@ -56,7 +65,12 @@ func resourceK8sWgCreate(ctx context.Context, d *schema.ResourceData, m interfac
 	urlValues.Add("workerNum", strconv.Itoa(d.Get("num").(int)))
 	urlValues.Add("workerCpu", strconv.Itoa(d.Get("cpu").(int)))
 	urlValues.Add("workerRam", strconv.Itoa(d.Get("ram").(int)))
-	urlValues.Add("workerDisk", strconv.Itoa(d.Get("disk").(int)))
+
+	if d.Get("disk") == nil {
+		urlValues.Add("workerDisk", strconv.Itoa(0))
+	} else {
+		urlValues.Add("workerDisk", strconv.Itoa(d.Get("disk").(int)))
+	}
 
 	resp, err := c.DecortAPICall(ctx, "POST", K8sWgCreateAPI, urlValues)
 	if err != nil {
@@ -100,34 +114,13 @@ func resourceK8sWgCreate(ctx context.Context, d *schema.ResourceData, m interfac
 func resourceK8sWgRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	log.Debugf("resourceK8sWgRead: called with %v", d.Id())
 
-	k8s, err := utilityDataK8sCheckPresence(ctx, d, m)
+	wg, err := utilityK8sWgCheckPresence(ctx, d, m)
 	if err != nil {
 		return diag.FromErr(err)
 	}
 
-	var id int
-	if d.Id() != "" {
-		id, err = strconv.Atoi(strings.Split(d.Id(), "#")[0])
-		if err != nil {
-			return diag.FromErr(err)
-		}
-	} else {
-		id = d.Get("wg_id").(int)
-	}
-
-	curWg := K8SGroup{}
-	for _, wg := range k8s.K8SGroups.Workers {
-		if wg.ID == uint64(id) {
-			curWg = wg
-			break
-		}
-	}
-	if curWg.ID == 0 {
-		return diag.Errorf("Not found wg with id: %v in k8s cluster: %v", id, k8s.ID)
-	}
-
 	workersComputeList := make([]kvmvm.ComputeGetResp, 0, 0)
-	for _, info := range curWg.DetailedInfo {
+	for _, info := range wg.DetailedInfo {
 		compute, err := utilityComputeCheckPresence(ctx, d, m, info.ID)
 		if err != nil {
 			return diag.FromErr(err)
@@ -135,10 +128,20 @@ func resourceK8sWgRead(ctx context.Context, d *schema.ResourceData, m interface{
 		workersComputeList = append(workersComputeList, *compute)
 	}
 
+	d.Set("wg_id", wg.ID)
+	if strings.Contains(d.Id(), "#") {
+		k8sId, err := strconv.Atoi(strings.Split(d.Id(), "#")[1])
+		if err != nil {
+			return diag.FromErr(err)
+		}
+
+		d.Set("k8s_id", k8sId)
+	} else {
+		d.Set("k8s_id", d.Get("k8s_id"))
+	}
 	d.SetId(strings.Split(d.Id(), "#")[0])
-	d.Set("k8s_id", k8s.ID)
-	d.Set("wg_id", curWg.ID)
-	flattenWgData(d, curWg, workersComputeList)
+
+	flattenWg(d, *wg, workersComputeList)
 
 	return nil
 }
@@ -147,6 +150,15 @@ func resourceK8sWgUpdate(ctx context.Context, d *schema.ResourceData, m interfac
 	log.Debugf("resourceK8sWgUpdate: called with k8s id %d", d.Get("k8s_id").(int))
 
 	c := m.(*controller.ControllerCfg)
+
+	haveK8sID, err := existK8sID(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	if !haveK8sID {
+		return diag.Errorf("resourceK8sUpdate: can't update k8s cluster because K8sID %d is not allowed or does not exist", d.Get("k8s_id").(int))
+	}
 
 	wg, err := utilityK8sWgCheckPresence(ctx, d, m)
 	if err != nil {
@@ -242,8 +254,7 @@ func resourceK8sWgSchemaMake() map[string]*schema.Schema {
 		"disk": {
 			Type:        schema.TypeInt,
 			Optional:    true,
-			ForceNew:    true,
-			Default:     0,
+			Computed:    true,
 			Description: "Worker node boot disk size. If unspecified or 0, size is defined by OS image size.",
 		},
 		"wg_id": {

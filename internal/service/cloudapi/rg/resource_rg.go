@@ -52,13 +52,8 @@ import (
 )
 
 func resourceResgroupCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	// First validate that we have all parameters required to create the new Resource Group
-
-	// Valid account ID is required to create new resource group
-	// obtain Account ID by account name - it should not be zero on success
-
-	rgName, argSet := d.GetOk("name")
-	if !argSet {
+	rgName, ok := d.GetOk("name")
+	if !ok {
 		return diag.FromErr(fmt.Errorf("Cannot create new RG: missing name."))
 	}
 
@@ -76,43 +71,39 @@ func resourceResgroupCreate(ctx context.Context, d *schema.ResourceData, m inter
 	}
 	*/
 
-	// all required parameters are set in the schema - we can continue with RG creation
 	log.Debugf("resourceResgroupCreate: called for RG name %s, account ID %d",
 		rgName.(string), d.Get("account_id").(int))
 
-	// Check input values
-	// AccountID
 	haveAccount, err := existAccountID(ctx, d, m)
 	if err != nil {
 		return diag.FromErr(err)
 	}
 	if !haveAccount {
-		return diag.Errorf("resourceResgroupCreate: can't create RG bacause AccountID %d not allowed or does not exist", d.Get("account_id").(int))
+		return diag.Errorf("resourceResgroupCreate: can't create RG because AccountID %d is not allowed or does not exist", d.Get("account_id").(int))
 	}
-	// GID
+
 	haveGID, err := existGID(ctx, d, m)
 	if err != nil {
 		return diag.FromErr(err)
 	}
 	if !haveGID {
-		return diag.Errorf("resourceResgroupCreate: can't create RG bacause GID %d not allowed or does not exist", d.Get("gid").(int))
+		return diag.Errorf("resourceResgroupCreate: can't create RG because GID %d is not allowed or does not exist", d.Get("gid").(int))
 	}
-	// ExtNetID
+
 	if _, ok := d.GetOk("ext_net_id"); ok {
 		haveExtNet, err := existExtNetID(ctx, d, m)
 		if err != nil {
 			return diag.FromErr(err)
 		}
 		if !haveExtNet {
-			return diag.Errorf("resourceResgroupCreate: can't create RG bacause ExtNetID %d not allowed or does not exist", d.Get("ext_net_id").(int))
+			return diag.Errorf("resourceResgroupCreate: can't create RG because ExtNetID %d is not allowed or does not exist", d.Get("ext_net_id").(int))
 		}
 	}
 
-	// quota settings are optional
 	setQuota := false
 	var quotaRecord QuotaRecord
-	argValue, argSet := d.GetOk("quota")
-	if argSet {
+	argValue, ok := d.GetOk("quota")
+	if ok {
 		log.Debugf("resourceResgroupCreate: setting Quota on RG requested")
 		quotaRecord = makeQuotaRecord(argValue.([]interface{}))
 		setQuota = true
@@ -125,53 +116,51 @@ func resourceResgroupCreate(ctx context.Context, d *schema.ResourceData, m inter
 	urlValues = &url.Values{}
 	urlValues.Add("accountId", strconv.Itoa(d.Get("account_id").(int)))
 	urlValues.Add("name", rgName.(string))
-	urlValues.Add("gid", strconv.Itoa(location.DefaultGridID)) // use default Grid ID, similar to disk resource mgmt convention
+	urlValues.Add("gid", strconv.Itoa(location.DefaultGridID))
 	urlValues.Add("owner", c.GetDecortUsername())
 
-	// pass quota values as set
 	if setQuota {
 		urlValues.Add("maxCPUCapacity", strconv.Itoa(quotaRecord.Cpu))
 		urlValues.Add("maxVDiskCapacity", strconv.Itoa(quotaRecord.Disk))
-		urlValues.Add("maxMemoryCapacity", fmt.Sprintf("%f", quotaRecord.Ram)) // RAM quota is float; this may change in the future
+		urlValues.Add("maxMemoryCapacity", fmt.Sprintf("%f", quotaRecord.Ram))
 		urlValues.Add("maxNetworkPeerTransfer", strconv.Itoa(quotaRecord.ExtTraffic))
 		urlValues.Add("maxNumPublicIP", strconv.Itoa(quotaRecord.ExtIPs))
 	}
 
-	// parse and handle network settings
-	defNetType, argSet := d.GetOk("def_net_type")
-	if argSet {
+	defNetType, ok := d.GetOk("def_net_type")
+	if ok {
 		urlValues.Add("def_net", defNetType.(string)) // NOTE: in API default network type is set by "def_net" parameter
 	} else {
 		d.Set("def_net_type", "PRIVATE")
 	}
 
-	ipcidr, argSet := d.GetOk("ipcidr")
-	if argSet {
+	ipcidr, ok := d.GetOk("ipcidr")
+	if ok {
 		urlValues.Add("ipcidr", ipcidr.(string))
 	}
 
-	description, argSet := d.GetOk("description")
-	if argSet {
+	description, ok := d.GetOk("description")
+	if ok {
 		urlValues.Add("desc", description.(string))
 	}
 
-	reason, argSet := d.GetOk("reason")
-	if argSet {
+	reason, ok := d.GetOk("reason")
+	if ok {
 		urlValues.Add("reason", reason.(string))
 	}
 
-	extNetId, argSet := d.GetOk("ext_net_id")
-	if argSet {
+	extNetId, ok := d.GetOk("ext_net_id")
+	if ok {
 		urlValues.Add("extNetId", strconv.Itoa(extNetId.(int)))
 	}
 
-	extIp, argSet := d.GetOk("ext_ip")
-	if argSet {
+	extIp, ok := d.GetOk("ext_ip")
+	if ok {
 		urlValues.Add("extIp", extIp.(string))
 	}
 
-	regComputes, argSet := d.GetOk("register_computes")
-	if argSet {
+	regComputes, ok := d.GetOk("register_computes")
+	if ok {
 		urlValues.Add("registerComputes", strconv.FormatBool(regComputes.(bool)))
 	}
 
@@ -179,7 +168,8 @@ func resourceResgroupCreate(ctx context.Context, d *schema.ResourceData, m inter
 	if err != nil {
 		return diag.FromErr(err)
 	}
-	d.SetId(apiResp) // rg/create API returns ID of the newly creted resource group on success
+
+	d.SetId(apiResp)
 
 	w := dc.Warnings{}
 	if access, ok := d.GetOk("access"); ok {
@@ -257,7 +247,6 @@ func resourceResgroupCreate(ctx context.Context, d *schema.ResourceData, m inter
 		}
 	}
 
-	// re-read newly created RG to make sure schema contains complete and up to date set of specifications
 	defer resourceResgroupRead(ctx, d, m)
 	return w.Get()
 }
@@ -268,23 +257,34 @@ func resourceResgroupRead(ctx context.Context, d *schema.ResourceData, m interfa
 
 	c := m.(*controller.ControllerCfg)
 
-	rgFacts, err := utilityResgroupCheckPresence(ctx, d, m)
+	rg, err := utilityResgroupCheckPresence(ctx, d, m)
 	if err != nil {
-		d.SetId("") // ensure ID is empty
+		d.SetId("")
 		return diag.FromErr(err)
 	}
 
-	switch rgFacts.Status {
+	hasChanged := false
+
+	switch rg.Status {
 	case status.Modeled:
+		return diag.Errorf("The resource group is in status: %s, please, contact support for more information", rg.Status)
 	case status.Created:
 	case status.Enabled:
 	case status.Deleted:
 		urlValues := &url.Values{}
 		urlValues.Add("rgId", d.Id())
+
 		_, err := c.DecortAPICall(ctx, "POST", RgRestoreAPI, urlValues)
 		if err != nil {
 			return diag.FromErr(err)
 		}
+		_, err = c.DecortAPICall(ctx, "POST", RgEnableAPI, urlValues)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+
+		hasChanged = true
+
 	case status.Deleting:
 	case status.Destroyed:
 		d.SetId("")
@@ -296,12 +296,14 @@ func resourceResgroupRead(ctx context.Context, d *schema.ResourceData, m interfa
 	case status.Enabling:
 	}
 
-	rgFacts, err = utilityResgroupCheckPresence(ctx, d, m)
-	if err != nil {
-		d.SetId("") // ensure ID is empty
-		return diag.FromErr(err)
+	if hasChanged {
+		rg, err = utilityResgroupCheckPresence(ctx, d, m)
+		if err != nil {
+			d.SetId("")
+			return diag.FromErr(err)
+		}
 	}
-	return diag.FromErr(flattenResgroup(d, *rgFacts))
+	return diag.FromErr(flattenResgroup(d, *rg))
 }
 
 func resourceResgroupUpdate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
@@ -311,8 +313,6 @@ func resourceResgroupUpdate(ctx context.Context, d *schema.ResourceData, m inter
 	c := m.(*controller.ControllerCfg)
 	urlValues := &url.Values{}
 
-	// Check input values
-	// AccountID
 	haveAccount, err := existAccountID(ctx, d, m)
 	if err != nil {
 		return diag.FromErr(err)
@@ -320,7 +320,7 @@ func resourceResgroupUpdate(ctx context.Context, d *schema.ResourceData, m inter
 	if !haveAccount {
 		return diag.Errorf("resourceResgroupUpdate: can't create RG bacause AccountID %d not allowed or does not exist", d.Get("account_id").(int))
 	}
-	// GID
+
 	haveGID, err := existGID(ctx, d, m)
 	if err != nil {
 		return diag.FromErr(err)
@@ -328,7 +328,7 @@ func resourceResgroupUpdate(ctx context.Context, d *schema.ResourceData, m inter
 	if !haveGID {
 		return diag.Errorf("resourceResgroupUpdate: can't create RG bacause GID %d not allowed or does not exist", d.Get("gid").(int))
 	}
-	// ExtNetID
+
 	if _, ok := d.GetOk("ext_net_id"); ok {
 		haveExtNet, err := existExtNetID(ctx, d, m)
 		if err != nil {
@@ -341,9 +341,11 @@ func resourceResgroupUpdate(ctx context.Context, d *schema.ResourceData, m inter
 
 	rgFacts, err := utilityResgroupCheckPresence(ctx, d, m)
 	if err != nil {
-		d.SetId("") // ensure ID is empty
+		d.SetId("")
 		return diag.FromErr(err)
 	}
+
+	hasChanged := false
 
 	switch rgFacts.Status {
 	case status.Modeled:
@@ -356,6 +358,12 @@ func resourceResgroupUpdate(ctx context.Context, d *schema.ResourceData, m inter
 		if err != nil {
 			return diag.FromErr(err)
 		}
+		_, err = c.DecortAPICall(ctx, "POST", RgEnableAPI, urlValues)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+
+		hasChanged = true
 	case status.Deleting:
 	case status.Destroyed:
 		d.SetId("")
@@ -365,6 +373,14 @@ func resourceResgroupUpdate(ctx context.Context, d *schema.ResourceData, m inter
 	case status.Disabling:
 	case status.Enabled:
 	case status.Enabling:
+	}
+
+	if hasChanged {
+		rgFacts, err = utilityDataResgroupCheckPresence(ctx, d, m)
+		if err != nil {
+			d.SetId("")
+			return diag.FromErr(err)
+		}
 	}
 	/* NOTE: we do not allow changing the following attributes of an existing RG via terraform:
 	   - def_net_type
@@ -393,7 +409,7 @@ func resourceResgroupUpdate(ctx context.Context, d *schema.ResourceData, m inter
 		return diag.FromErr(fmt.Errorf("resourceResgroupUpdate: RG ID %s: changing ext_net_id for existing RG is not allowed", d.Id()))
 	}
 
-	doGeneralUpdate := false // will be true if general RG update is necessary (API rg/update)
+	doGeneralUpdate := false
 
 	urlValues = &url.Values{}
 	urlValues.Add("rgId", d.Id())
@@ -412,7 +428,7 @@ func resourceResgroupUpdate(ctx context.Context, d *schema.ResourceData, m inter
 	if quotaSet {
 		log.Debugf("resourceResgroupUpdate: quota specified - looking for deltas from the old quota.")
 		quotarecordNew := makeQuotaRecord(quotaValue.([]interface{}))
-		quotaValueOld, _ := d.GetChange("quota") // returns old as 1st, new as 2nd return value
+		quotaValueOld, _ := d.GetChange("quota")
 		quotarecordOld := makeQuotaRecord(quotaValueOld.([]interface{}))
 		log.Debug(quotaValueOld, quotarecordNew)
 
@@ -428,7 +444,7 @@ func resourceResgroupUpdate(ctx context.Context, d *schema.ResourceData, m inter
 			urlValues.Add("maxVDiskCapacity", strconv.Itoa(quotarecordNew.Disk))
 		}
 
-		if quotarecordNew.Ram != quotarecordOld.Ram { // NB: quota on RAM is stored as float32, in units of MB
+		if quotarecordNew.Ram != quotarecordOld.Ram {
 			doGeneralUpdate = true
 			log.Debugf("resourceResgroupUpdate: Ram diff %f <- %f", quotarecordNew.Ram, quotarecordOld.Ram)
 			urlValues.Add("maxMemoryCapacity", fmt.Sprintf("%f", quotarecordNew.Ram))
@@ -605,7 +621,7 @@ func ResourceRgSchemaMake() map[string]*schema.Schema {
 		"gid": {
 			Type:        schema.TypeInt,
 			Required:    true,
-			ForceNew:    true, // change of Grid ID will require new RG
+			ForceNew:    true,
 			Description: "Unique ID of the grid, where this resource group is deployed.",
 		},
 
@@ -816,7 +832,7 @@ func ResourceRgSchemaMake() map[string]*schema.Schema {
 			Computed: true,
 		},
 		"vins": {
-			Type:     schema.TypeList, //this is a list of ints
+			Type:     schema.TypeList,
 			Computed: true,
 			Elem: &schema.Schema{
 				Type: schema.TypeInt,
@@ -825,7 +841,7 @@ func ResourceRgSchemaMake() map[string]*schema.Schema {
 		},
 
 		"vms": {
-			Type:     schema.TypeList, //t his is a list of ints
+			Type:     schema.TypeList,
 			Computed: true,
 			Elem: &schema.Schema{
 				Type: schema.TypeInt,

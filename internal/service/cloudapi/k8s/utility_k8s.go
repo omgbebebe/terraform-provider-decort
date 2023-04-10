@@ -37,7 +37,6 @@ import (
 	"encoding/json"
 	"net/url"
 	"strconv"
-	"strings"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/controller"
@@ -89,15 +88,8 @@ func utilityComputeCheckPresence(ctx context.Context, d *schema.ResourceData, m 
 func utilityDataK8sCheckPresence(ctx context.Context, d *schema.ResourceData, m interface{}) (*K8SRecord, error) {
 	c := m.(*controller.ControllerCfg)
 	urlValues := &url.Values{}
-	if d.Get("k8s_id") != 0 && d.Get("k8s_id") != nil {
-		urlValues.Add("k8sId", strconv.Itoa(d.Get("k8s_id").(int)))
-	} else if id := d.Id(); id != "" {
-		if strings.Contains(id, "#") {
-			urlValues.Add("k8sId", strings.Split(d.Id(), "#")[1])
-		} else {
-			urlValues.Add("k8sId", d.Id())
-		}
-	}
+	urlValues.Add("k8sId", strconv.Itoa(d.Get("k8s_id").(int)))
+
 	k8sRaw, err := c.DecortAPICall(ctx, "POST", K8sGetAPI, urlValues)
 	if err != nil {
 		return nil, err

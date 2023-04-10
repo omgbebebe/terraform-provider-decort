@@ -257,9 +257,13 @@ func flattenK8sList(d *schema.ResourceData, k8sItems K8SList) {
 }
 
 func flattenResourceK8s(d *schema.ResourceData, k8s K8SRecord, masters []kvmvm.ComputeGetResp, workers []kvmvm.ComputeGetResp) {
+	wg_name := k8s.K8SGroups.Workers[0].Name
+
 	d.Set("acl", flattenAcl(k8s.ACL))
 	d.Set("account_id", k8s.AccountID)
 	d.Set("account_name", k8s.AccountName)
+	d.Set("k8sci_id", k8s.CIID)
+	d.Set("wg_name", wg_name)
 	d.Set("bservice_id", k8s.BServiceID)
 	d.Set("created_by", k8s.CreatedBy)
 	d.Set("created_time", k8s.CreatedTime)
@@ -268,7 +272,9 @@ func flattenResourceK8s(d *schema.ResourceData, k8s K8SRecord, masters []kvmvm.C
 	d.Set("k8s_ci_name", k8s.K8CIName)
 	d.Set("masters", flattenMasterGroup(k8s.K8SGroups.Masters, masters))
 	d.Set("workers", flattenK8sGroup(k8s.K8SGroups.Workers, workers))
+	d.Set("with_lb", k8s.LBID != 0)
 	d.Set("lb_id", k8s.LBID)
+	d.Set("name", k8s.Name)
 	d.Set("rg_id", k8s.RGID)
 	d.Set("rg_name", k8s.RGName)
 	d.Set("status", k8s.Status)
@@ -278,7 +284,7 @@ func flattenResourceK8s(d *schema.ResourceData, k8s K8SRecord, masters []kvmvm.C
 	d.Set("default_wg_id", k8s.K8SGroups.Workers[0].ID)
 }
 
-func flattenWgData(d *schema.ResourceData, wg K8SGroup, computes []kvmvm.ComputeGetResp) {
+func flattenWg(d *schema.ResourceData, wg K8SGroup, computes []kvmvm.ComputeGetResp) {
 	d.Set("annotations", wg.Annotations)
 	d.Set("cpu", wg.CPU)
 	d.Set("detailed_info", flattenDetailedInfo(wg.DetailedInfo, computes))

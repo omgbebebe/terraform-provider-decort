@@ -39,6 +39,8 @@ const (
 	K8sDeleteAPI      = "/restmachine/cloudapi/k8s/delete"
 	K8sListAPI        = "/restmachine/cloudapi/k8s/list"
 	K8sListDeletedAPI = "/restmachine/cloudapi/k8s/listDeleted"
+	K8sRestoreAPI     = "/restmachine/cloudapi/k8s/restore"
+	K8sEnableAPI     = "/restmachine/cloudapi/k8s/enable"
 
 	K8sWgCreateAPI = "/restmachine/cloudapi/k8s/workersGroupAdd"
 	K8sWgDeleteAPI = "/restmachine/cloudapi/k8s/workersGroupDelete"

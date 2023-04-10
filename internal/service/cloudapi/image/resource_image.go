@@ -40,13 +40,34 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	log "github.com/sirupsen/logrus"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/constants"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/controller"
-	log "github.com/sirupsen/logrus"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/status"
 )
 
 func resourceImageCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	log.Debugf("resourceImageCreate: called for image %s", d.Get("name").(string))
+
+	haveGID, err := existGID(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	if !haveGID {
+		return diag.Errorf("resourceImageCreate: can't create Image because GID %d is not allowed or does not exist", d.Get("gid").(int))
+	}
+
+	if _, ok := d.GetOk("account_id"); ok {
+		haveAccountID, err := existAccountID(ctx, d, m)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+
+		if !haveAccountID {
+			return diag.Errorf("resourceImageCreate: can't create Image because AccountID %d is not allowed or does not exist", d.Get("account_id").(int))
+		}
+	}
 
 	c := m.(*controller.ControllerCfg)
 	urlValues := &url.Values{}
@@ -96,13 +117,7 @@ func resourceImageCreate(ctx context.Context, d *schema.ResourceData, m interfac
 	if architecture, ok := d.GetOk("architecture"); ok {
 		urlValues.Add("architecture", architecture.(string))
 	}
-	/* uncomment then OK
-	imageId, err := c.DecortAPICall(ctx, "POST", imageCreateAPI, urlValues)
-	if err != nil {
-		return diag.FromErr(err)
-	}
-	*/
-	//innovation
+
 	res, err := c.DecortAPICall(ctx, "POST", imageCreateAPI, urlValues)
 	if err != nil {
 		return diag.FromErr(err)
@@ -141,41 +156,17 @@ func resourceImageRead(ctx context.Context, d *schema.ResourceData, m interface{
 		return diag.FromErr(err)
 	}
 
-	d.Set("unc_path", img.UNCPath)
-	d.Set("ckey", img.CKey)
-	d.Set("account_id", img.AccountId)
-	d.Set("acl", img.Acl)
-	d.Set("architecture", img.Architecture)
-	d.Set("boot_type", img.BootType)
-	d.Set("bootable", img.Bootable)
-	d.Set("compute_ci_id", img.ComputeCiId)
-	d.Set("deleted_time", img.DeletedTime)
-	d.Set("desc", img.Description)
-	d.Set("drivers", img.Drivers)
-	d.Set("enabled", img.Enabled)
-	d.Set("gid", img.GridId)
-	d.Set("guid", img.GUID)
-	d.Set("history", flattenHistory(img.History))
-	d.Set("hot_resize", img.HotResize)
-	d.Set("image_id", img.Id)
-	d.Set("last_modified", img.LastModified)
-	d.Set("link_to", img.LinkTo)
-	d.Set("milestones", img.Milestones)
-	d.Set("image_name", img.Name)
-	d.Set("password", img.Password)
-	d.Set("pool_name", img.Pool)
-	d.Set("provider_name", img.ProviderName)
-	d.Set("purge_attempts", img.PurgeAttempts)
-	d.Set("res_id", img.ResId)
-	d.Set("rescuecd", img.RescueCD)
-	d.Set("sep_id", img.SepId)
-	d.Set("shared_with", img.SharedWith)
-	d.Set("size", img.Size)
-	d.Set("status", img.Status)
-	d.Set("tech_status", img.TechStatus)
-	d.Set("type", img.Type)
-	d.Set("username", img.Username)
-	d.Set("version", img.Version)
+	switch img.Status {
+	case status.Modeled:
+		return diag.Errorf("The image is in status: %s, please, contact support for more information", img.Status)
+	case status.Creating:
+	case status.Created:
+	case status.Destroyed, status.Purged:
+		d.SetId("")
+		return resourceImageCreate(ctx, d, m)
+	}
+
+	flattenImage(d, img)
 
 	return nil
 }
@@ -222,8 +213,46 @@ func resourceImageEditName(ctx context.Context, d *schema.ResourceData, m interf
 	return nil
 }
 
-func resourceImageEdit(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
+func resourceImageUpdate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	log.Debugf("resourceImageEdit: called for %s, id: %s", d.Get("name").(string), d.Id())
+
+	haveGID, err := existGID(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	if !haveGID {
+		return diag.Errorf("resourceImageUpdate: can't update Image because GID %d is not allowed or does not exist", d.Get("gid").(int))
+	}
+
+	if _, ok := d.GetOk("account_id"); ok {
+		haveAccountID, err := existAccountID(ctx, d, m)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+
+		if !haveAccountID {
+			return diag.Errorf("resourceImageUpdate: can't update Image because AccountID %d is not allowed or does not exist", d.Get("account_id").(int))
+		}
+	}
+
+	image, err := utilityImageCheckPresence(ctx, d, m)
+	if image == nil {
+		if err != nil {
+			return diag.FromErr(err)
+		}
+		return nil
+	}
+
+	switch image.Status {
+	case status.Modeled:
+		return diag.Errorf("The image is in status: %s, please, contact support for more information", image.Status)
+	case status.Creating:
+	case status.Created:
+	case status.Destroyed, status.Purged:
+		d.SetId("")
+		return resourceImageCreate(ctx, d, m)
+	}
 
 	if d.HasChange("name") {
 		err := resourceImageEditName(ctx, d, m)
@@ -241,7 +270,7 @@ func ResourceImage() *schema.Resource {
 
 		CreateContext: resourceImageCreate,
 		ReadContext:   resourceImageRead,
-		UpdateContext: resourceImageEdit,
+		UpdateContext: resourceImageUpdate,
 		DeleteContext: resourceImageDelete,
 
 		Importer: &schema.ResourceImporter{

@@ -80,7 +80,7 @@ terraform init
 3. Склонируйте репозиторий с провайдером, выполнив команду:
 
 ```bash
-git clone https://repository.basistech.ru/BASIS/terraform-provider-decort.git
+git clone https://repository.basistech.ru/BASIS/terraform-provider-decort
 ```
 
 4. Перейдите в скачанную папку с провайдером и выполните команду

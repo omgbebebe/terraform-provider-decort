@@ -38,8 +38,8 @@ import (
 	"net/url"
 	"strconv"
 
-	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/controller"
 	log "github.com/sirupsen/logrus"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/controller"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
@@ -50,8 +50,12 @@ func utilityDiskCheckPresence(ctx context.Context, d *schema.ResourceData, m int
 
 	disk := &Disk{}
 
-	if d.Get("disk_id").(int) == 0 {
-		urlValues.Add("diskId", d.Id())
+	if d.Get("disk_id") != nil {
+		if d.Get("disk_id").(int) == 0 {
+			urlValues.Add("diskId", d.Id())
+		} else {
+			urlValues.Add("diskId", strconv.Itoa(d.Get("disk_id").(int)))
+		}
 	} else {
 		urlValues.Add("diskId", strconv.Itoa(d.Get("disk_id").(int)))
 	}

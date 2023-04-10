@@ -49,6 +49,15 @@ import (
 func resourceLBBackendCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	log.Debugf("resourceLBBackendCreate")
 
+	haveLBID, err := existLBID(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	if !haveLBID {
+		return diag.Errorf("resourceLBBackendCreate: can't create LB backend because LBID %d is not allowed or does not exist", d.Get("lb_id").(int))
+	}
+
 	c := m.(*controller.ControllerCfg)
 	urlValues := &url.Values{}
 	urlValues.Add("backendName", d.Get("name").(string))
@@ -82,7 +91,7 @@ func resourceLBBackendCreate(ctx context.Context, d *schema.ResourceData, m inte
 		urlValues.Add("weight", strconv.Itoa(weight.(int)))
 	}
 
-	_, err := c.DecortAPICall(ctx, "POST", lbBackendCreateAPI, urlValues)
+	_, err = c.DecortAPICall(ctx, "POST", lbBackendCreateAPI, urlValues)
 	if err != nil {
 		return diag.FromErr(err)
 	}
@@ -155,10 +164,19 @@ func resourceLBBackendDelete(ctx context.Context, d *schema.ResourceData, m inte
 	return nil
 }
 
-func resourceLBBackendEdit(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
+func resourceLBBackendUpdate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	log.Debugf("resourceLBBackendEdit")
 	c := m.(*controller.ControllerCfg)
 	urlValues := &url.Values{}
+
+	haveLBID, err := existLBID(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	if !haveLBID {
+		return diag.Errorf("resourceLBBackendUpdate: can't update LB backend because LBID %d is not allowed or does not exist", d.Get("lb_id").(int))
+	}
 
 	urlValues.Add("backendName", d.Get("name").(string))
 	urlValues.Add("lbId", strconv.Itoa(d.Get("lb_id").(int)))
@@ -191,7 +209,7 @@ func resourceLBBackendEdit(ctx context.Context, d *schema.ResourceData, m interf
 		urlValues.Add("weight", strconv.Itoa(d.Get("weight").(int)))
 	}
 
-	_, err := c.DecortAPICall(ctx, "POST", lbBackendUpdateAPI, urlValues)
+	_, err = c.DecortAPICall(ctx, "POST", lbBackendUpdateAPI, urlValues)
 	if err != nil {
 		return diag.FromErr(err)
 	}
@@ -207,7 +225,7 @@ func ResourceLBBackend() *schema.Resource {
 
 		CreateContext: resourceLBBackendCreate,
 		ReadContext:   resourceLBBackendRead,
-		UpdateContext: resourceLBBackendEdit,
+		UpdateContext: resourceLBBackendUpdate,
 		DeleteContext: resourceLBBackendDelete,
 
 		Importer: &schema.ResourceImporter{

@@ -49,6 +49,15 @@ import (
 func resourceLBBackendServerCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	log.Debugf("resourceLBBackendServerCreate")
 
+	haveLBID, err := existLBID(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	if !haveLBID {
+		return diag.Errorf("resourceLBBackendServerCreate: can't create LB backend server because LBID %d is not allowed or does not exist", d.Get("lb_id").(int))
+	}
+
 	c := m.(*controller.ControllerCfg)
 	urlValues := &url.Values{}
 	urlValues.Add("backendName", d.Get("backend_name").(string))
@@ -86,7 +95,7 @@ func resourceLBBackendServerCreate(ctx context.Context, d *schema.ResourceData, 
 		urlValues.Add("weight", strconv.Itoa(weight.(int)))
 	}
 
-	_, err := c.DecortAPICall(ctx, "POST", lbBackendServerAddAPI, urlValues)
+	_, err = c.DecortAPICall(ctx, "POST", lbBackendServerAddAPI, urlValues)
 	if err != nil {
 		return diag.FromErr(err)
 	}
@@ -163,10 +172,19 @@ func resourceLBBackendServerDelete(ctx context.Context, d *schema.ResourceData, 
 	return nil
 }
 
-func resourceLBBackendServerEdit(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
+func resourceLBBackendServerUpdate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	log.Debugf("resourceLBBackendServerEdit")
 	c := m.(*controller.ControllerCfg)
 	urlValues := &url.Values{}
+
+	haveLBID, err := existLBID(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	if !haveLBID {
+		return diag.Errorf("resourceLBBackendServerUpdate: can't update LB backend server because LBID %d is not allowed or does not exist", d.Get("lb_id").(int))
+	}
 
 	urlValues.Add("backendName", d.Get("backend_name").(string))
 	urlValues.Add("lbId", strconv.Itoa(d.Get("lb_id").(int)))
@@ -202,7 +220,7 @@ func resourceLBBackendServerEdit(ctx context.Context, d *schema.ResourceData, m 
 		urlValues.Add("weight", strconv.Itoa(d.Get("weight").(int)))
 	}
 
-	_, err := c.DecortAPICall(ctx, "POST", lbBackendServerUpdateAPI, urlValues)
+	_, err = c.DecortAPICall(ctx, "POST", lbBackendServerUpdateAPI, urlValues)
 	if err != nil {
 		return diag.FromErr(err)
 	}
@@ -218,7 +236,7 @@ func ResourceLBBackendServer() *schema.Resource {
 
 		CreateContext: resourceLBBackendServerCreate,
 		ReadContext:   resourceLBBackendServerRead,
-		UpdateContext: resourceLBBackendServerEdit,
+		UpdateContext: resourceLBBackendServerUpdate,
 		DeleteContext: resourceLBBackendServerDelete,
 
 		Importer: &schema.ResourceImporter{

@@ -39,21 +39,20 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	log "github.com/sirupsen/logrus"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/constants"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/controller"
-	log "github.com/sirupsen/logrus"
 )
 
 func resourceDiskSnapshotCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	urlValues := &url.Values{}
 	c := m.(*controller.ControllerCfg)
+
 	disk, err := utilityDiskCheckPresence(ctx, d, m)
-	if disk == nil {
-		if err != nil {
-			return diag.FromErr(err)
-		}
-		return nil
+	if err != nil {
+		return diag.FromErr(err)
 	}
+
 	snapshots := disk.Snapshots
 	snapshot := Snapshot{}
 	label := d.Get("label").(string)
@@ -190,16 +189,16 @@ func resourceDiskSnapshotSchemaMake() map[string]*schema.Schema {
 			Default:     false,
 			Description: "Needed in order to make a snapshot rollback",
 		},
-		"guid": {
-			Type:        schema.TypeString,
-			Computed:    true,
-			Description: "ID of the snapshot",
-		},
 		"timestamp": {
 			Type:        schema.TypeInt,
 			Optional:    true,
 			Computed:    true,
 			Description: "Snapshot time",
+		},
+		"guid": {
+			Type:        schema.TypeString,
+			Computed:    true,
+			Description: "ID of the snapshot",
 		},
 		"res_id": {
 			Type:        schema.TypeString,

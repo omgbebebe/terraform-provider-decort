@@ -43,7 +43,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/constants"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/controller"
-	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/flattens"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/status"
 )
 
 func resourceAccountCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
@@ -122,13 +122,10 @@ func resourceAccountCreate(ctx context.Context, d *schema.ResourceData, m interf
 		return diag.FromErr(err)
 	}
 
-	d.SetId(accountId)
-	d.Set("account_id", accountId)
+	accIdParsed, _ := strconv.Atoi(accountId)
 
-	diagnostics := resourceAccountRead(ctx, d, m)
-	if diagnostics != nil {
-		return diagnostics
-	}
+	d.SetId(accountId)
+	d.Set("account_id", accIdParsed)
 
 	urlValues = &url.Values{}
 
@@ -167,44 +164,52 @@ func resourceAccountCreate(ctx context.Context, d *schema.ResourceData, m interf
 		}
 	}
 
-	return nil
+	return resourceAccountRead(ctx, d, m)
 }
 
 func resourceAccountRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	log.Debugf("resourceAccountRead")
+	log.Debugf("resourceAccountRead: called for account with ID: %v", d.Id())
+
+	c := m.(*controller.ControllerCfg)
 
 	acc, err := utilityAccountCheckPresence(ctx, d, m)
-	if acc == nil {
+	if err != nil {
 		d.SetId("")
 		return diag.FromErr(err)
 	}
 
-	d.Set("dc_location", acc.DCLocation)
-	d.Set("resources", flattenAccResources(acc.Resources))
-	d.Set("ckey", acc.CKey)
-	d.Set("meta", flattens.FlattenMeta(acc.Meta))
-	d.Set("acl", flattenAccAcl(acc.Acl))
-	d.Set("company", acc.Company)
-	d.Set("companyurl", acc.CompanyUrl)
-	d.Set("created_by", acc.CreatedBy)
-	d.Set("created_time", acc.CreatedTime)
-	d.Set("deactivation_time", acc.DeactiovationTime)
-	d.Set("deleted_by", acc.DeletedBy)
-	d.Set("deleted_time", acc.DeletedTime)
-	d.Set("displayname", acc.DisplayName)
-	d.Set("guid", acc.GUID)
-	d.Set("account_id", acc.ID)
-	d.Set("account_name", acc.Name)
-	d.Set("resource_limits", flattenRgResourceLimits(acc.ResourceLimits))
-	d.Set("send_access_emails", acc.SendAccessEmails)
-	d.Set("service_account", acc.ServiceAccount)
-	d.Set("status", acc.Status)
-	d.Set("updated_time", acc.UpdatedTime)
-	d.Set("version", acc.Version)
-	d.Set("vins", acc.Vins)
-	d.Set("vinses", acc.Vinses)
-	d.Set("computes", flattenAccComputes(acc.Computes))
-	d.Set("machines", flattenAccMachines(acc.Machines))
+	hasChanged := false
+
+	switch acc.Status {
+	case status.Destroyed:
+		d.SetId("")
+		return resourceAccountCreate(ctx, d, m)
+	case status.Destroying:
+		return diag.Errorf("The account is in progress with status: %s", acc.Status)
+	case status.Deleted:
+		urlValues := &url.Values{}
+		urlValues.Add("accountId", d.Id())
+
+		_, err := c.DecortAPICall(ctx, "POST", accountRestoreAPI, urlValues)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+
+		hasChanged = true
+	case status.Disabled:
+		log.Debugf("The account is in status: %s, troubles may occur with update. Please, enable account first.", acc.Status)
+	case status.Confirmed:
+	}
+
+	if hasChanged {
+		acc, err = utilityAccountCheckPresence(ctx, d, m)
+		if err != nil {
+			d.SetId("")
+			return diag.FromErr(err)
+		}
+	}
+
+	flattenAccount(d, *acc)
 
 	return nil
 }
@@ -234,11 +239,49 @@ func resourceAccountDelete(ctx context.Context, d *schema.ResourceData, m interf
 	return nil
 }
 
-func resourceAccountEdit(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
+func resourceAccountUpdate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	log.Debugf("resourceAccountEdit")
 	c := m.(*controller.ControllerCfg)
 
 	urlValues := &url.Values{}
+
+	acc, err := utilityAccountCheckPresence(ctx, d, m)
+	if err != nil {
+		d.SetId("")
+		return diag.FromErr(err)
+	}
+
+	hasChanged := false
+
+	switch acc.Status {
+	case status.Destroyed:
+		d.SetId("")
+		return resourceAccountCreate(ctx, d, m)
+	case status.Destroying:
+		return diag.Errorf("The account is in progress with status: %s", acc.Status)
+	case status.Deleted:
+		urlVal := &url.Values{}
+		urlVal.Add("accountId", d.Id())
+
+		_, err := c.DecortAPICall(ctx, "POST", accountRestoreAPI, urlVal)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+
+		hasChanged = true
+	case status.Disabled:
+		log.Debugf("The account is in status: %s, troubles may occur with update. Please, enable account first.", acc.Status)
+	case status.Confirmed:
+	}
+
+	if hasChanged {
+		acc, err = utilityAccountCheckPresence(ctx, d, m)
+		if err != nil {
+			d.SetId("")
+			return diag.FromErr(err)
+		}
+	}
+
 	if d.HasChange("enable") {
 		api := accountDisableAPI
 		enable := d.Get("enable").(bool)
@@ -424,7 +467,7 @@ func resourceAccountEdit(ctx context.Context, d *schema.ResourceData, m interfac
 
 	}
 
-	return nil
+	return resourceAccountRead(ctx, d, m)
 }
 
 func isContainsUser(els []interface{}, el interface{}) bool {
@@ -553,7 +596,6 @@ func resourceAccountSchemaMake() map[string]*schema.Schema {
 		},
 		"account_id": {
 			Type:     schema.TypeInt,
-			Optional: true,
 			Computed: true,
 		},
 		"dc_location": {
@@ -564,120 +606,7 @@ func resourceAccountSchemaMake() map[string]*schema.Schema {
 			Type:     schema.TypeList,
 			Computed: true,
 			Elem: &schema.Resource{
-				Schema: map[string]*schema.Schema{
-					"current": {
-						Type:     schema.TypeList,
-						Computed: true,
-						Elem: &schema.Resource{
-							Schema: map[string]*schema.Schema{
-								"cpu": {
-									Type:     schema.TypeInt,
-									Computed: true,
-								},
-								"disksize": {
-									Type:     schema.TypeFloat,
-									Computed: true,
-								},
-								"extips": {
-									Type:     schema.TypeInt,
-									Computed: true,
-								},
-								"exttraffic": {
-									Type:     schema.TypeInt,
-									Computed: true,
-								},
-								"gpu": {
-									Type:     schema.TypeInt,
-									Computed: true,
-								},
-								"ram": {
-									Type:     schema.TypeInt,
-									Computed: true,
-								},
-								"seps": {
-									Type:     schema.TypeList,
-									Computed: true,
-									Elem: &schema.Resource{
-										Schema: map[string]*schema.Schema{
-											"sep_id": {
-												Type:     schema.TypeString,
-												Computed: true,
-											},
-											"data_name": {
-												Type:     schema.TypeString,
-												Computed: true,
-											},
-											"disk_size": {
-												Type:     schema.TypeFloat,
-												Computed: true,
-											},
-											"disk_size_max": {
-												Type:     schema.TypeInt,
-												Computed: true,
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-					"reserved": {
-						Type:     schema.TypeList,
-						Computed: true,
-						Elem: &schema.Resource{
-							Schema: map[string]*schema.Schema{
-								"cpu": {
-									Type:     schema.TypeInt,
-									Computed: true,
-								},
-								"disksize": {
-									Type:     schema.TypeFloat,
-									Computed: true,
-								},
-								"extips": {
-									Type:     schema.TypeInt,
-									Computed: true,
-								},
-								"exttraffic": {
-									Type:     schema.TypeInt,
-									Computed: true,
-								},
-								"gpu": {
-									Type:     schema.TypeInt,
-									Computed: true,
-								},
-								"ram": {
-									Type:     schema.TypeInt,
-									Computed: true,
-								},
-								"seps": {
-									Type:     schema.TypeList,
-									Computed: true,
-									Elem: &schema.Resource{
-										Schema: map[string]*schema.Schema{
-											"sep_id": {
-												Type:     schema.TypeString,
-												Computed: true,
-											},
-											"data_name": {
-												Type:     schema.TypeString,
-												Computed: true,
-											},
-											"disk_size": {
-												Type:     schema.TypeFloat,
-												Computed: true,
-											},
-											"disk_size_max": {
-												Type:     schema.TypeInt,
-												Computed: true,
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
+				Schema: resourcesSchemaMake(),
 			},
 		},
 		"ckey": {
@@ -695,36 +624,7 @@ func resourceAccountSchemaMake() map[string]*schema.Schema {
 			Type:     schema.TypeList,
 			Computed: true,
 			Elem: &schema.Resource{
-				Schema: map[string]*schema.Schema{
-					"can_be_deleted": {
-						Type:     schema.TypeBool,
-						Computed: true,
-					},
-					"explicit": {
-						Type:     schema.TypeBool,
-						Computed: true,
-					},
-					"guid": {
-						Type:     schema.TypeString,
-						Computed: true,
-					},
-					"right": {
-						Type:     schema.TypeString,
-						Computed: true,
-					},
-					"status": {
-						Type:     schema.TypeString,
-						Computed: true,
-					},
-					"type": {
-						Type:     schema.TypeString,
-						Computed: true,
-					},
-					"user_group_id": {
-						Type:     schema.TypeString,
-						Computed: true,
-					},
-				},
+				Schema: aclSchemaMake(),
 			},
 		},
 		"company": {
@@ -790,32 +690,14 @@ func resourceAccountSchemaMake() map[string]*schema.Schema {
 			Type:     schema.TypeList,
 			Computed: true,
 			Elem: &schema.Resource{
-				Schema: map[string]*schema.Schema{
-					"started": {
-						Type:     schema.TypeInt,
-						Computed: true,
-					},
-					"stopped": {
-						Type:     schema.TypeInt,
-						Computed: true,
-					},
-				},
+				Schema: computesSchemaMake(),
 			},
 		},
 		"machines": {
 			Type:     schema.TypeList,
 			Computed: true,
 			Elem: &schema.Resource{
-				Schema: map[string]*schema.Schema{
-					"halted": {
-						Type:     schema.TypeInt,
-						Computed: true,
-					},
-					"running": {
-						Type:     schema.TypeInt,
-						Computed: true,
-					},
-				},
+				Schema: machinesSchemaMake(),
 			},
 		},
 		"vinses": {
@@ -831,7 +713,7 @@ func ResourceAccount() *schema.Resource {
 
 		CreateContext: resourceAccountCreate,
 		ReadContext:   resourceAccountRead,
-		UpdateContext: resourceAccountEdit,
+		UpdateContext: resourceAccountUpdate,
 		DeleteContext: resourceAccountDelete,
 
 		Importer: &schema.ResourceImporter{

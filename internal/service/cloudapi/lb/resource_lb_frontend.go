@@ -48,13 +48,22 @@ import (
 func resourceLBFrontendCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	log.Debugf("resourceLBFrontendCreate")
 
+	haveLBID, err := existLBID(ctx, d, m)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	if !haveLBID {
+		return diag.Errorf("resourceLBFrontendCreate: can't create LB frontend because LBID %d is not allowed or does not exist", d.Get("lb_id").(int))
+	}
+
 	c := m.(*controller.ControllerCfg)
 	urlValues := &url.Values{}
 	urlValues.Add("backendName", d.Get("backend_name").(string))
 	urlValues.Add("lbId", strconv.Itoa(d.Get("lb_id").(int)))
 	urlValues.Add("frontendName", d.Get("name").(string))
 
-	_, err := c.DecortAPICall(ctx, "POST", lbFrontendCreateAPI, urlValues)
+	_, err = c.DecortAPICall(ctx, "POST", lbFrontendCreateAPI, urlValues)
 	if err != nil {
 		return diag.FromErr(err)
 	}

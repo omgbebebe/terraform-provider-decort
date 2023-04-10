@@ -38,15 +38,82 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/controller"
+	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/service/cloudapi/kvmvm"
 )
+
+func utilityDataK8sWgCheckPresence(ctx context.Context, d *schema.ResourceData, m interface{}) (*K8SGroup, []kvmvm.ComputeGetResp, error) {
+	c := m.(*controller.ControllerCfg)
+	urlValues := &url.Values{}
+
+	k8sId := d.Get("k8s_id").(int)
+	wgId := d.Get("wg_id").(int)
+
+	urlValues.Add("k8sId", strconv.Itoa(k8sId))
+
+	k8sRaw, err := c.DecortAPICall(ctx, "POST", K8sGetAPI, urlValues)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	k8s := K8SRecord{}
+	err = json.Unmarshal([]byte(k8sRaw), &k8s)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	curWg := K8SGroup{}
+	for _, wg := range k8s.K8SGroups.Workers {
+		if wg.ID == uint64(wgId) {
+			curWg = wg
+			break
+		}
+	}
+	if curWg.ID == 0 {
+		return nil, nil, fmt.Errorf("WG with id %v in k8s cluster %v not found", wgId, k8sId)
+	}
+
+	workersComputeList := make([]kvmvm.ComputeGetResp, 0, 0)
+	for _, info := range curWg.DetailedInfo {
+		compute, err := utilityComputeCheckPresence(ctx, d, m, info.ID)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		workersComputeList = append(workersComputeList, *compute)
+	}
+
+	return &curWg, workersComputeList, nil
+}
 
 func utilityK8sWgCheckPresence(ctx context.Context, d *schema.ResourceData, m interface{}) (*K8SGroup, error) {
 	c := m.(*controller.ControllerCfg)
 	urlValues := &url.Values{}
-	urlValues.Add("k8sId", strconv.Itoa(d.Get("k8s_id").(int)))
+	var wgId int
+	var k8sId int
+	var err error
+
+	if strings.Contains(d.Id(), "#") {
+		wgId, err = strconv.Atoi(strings.Split(d.Id(), "#")[0])
+		if err != nil {
+			return nil, err
+		}
+		k8sId, err = strconv.Atoi(strings.Split(d.Id(), "#")[1])
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		wgId, err = strconv.Atoi(d.Id())
+		if err != nil {
+			return nil, err
+		}
+		k8sId = d.Get("k8s_id").(int)
+	}
+
+	urlValues.Add("k8sId", strconv.Itoa(k8sId))
 
 	resp, err := c.DecortAPICall(ctx, "POST", K8sGetAPI, urlValues)
 	if err != nil {
@@ -62,21 +129,11 @@ func utilityK8sWgCheckPresence(ctx context.Context, d *schema.ResourceData, m in
 		return nil, err
 	}
 
-	var id int
-	if d.Id() != "" {
-		id, err = strconv.Atoi(d.Id())
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		id = d.Get("wg_id").(int)
-	}
-
 	for _, wg := range k8s.K8SGroups.Workers {
-		if wg.ID == uint64(id) {
+		if wg.ID == uint64(wgId) {
 			return &wg, nil
 		}
 	}
 
-	return nil, fmt.Errorf("Not found wg with id: %v in k8s cluster: %v", id, k8s.ID)
+	return nil, fmt.Errorf("Not found wg with id: %v in k8s cluster: %v", wgId, k8s.ID)
 }

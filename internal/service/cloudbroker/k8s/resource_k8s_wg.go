@@ -38,9 +38,9 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	log "github.com/sirupsen/logrus"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/constants"
 	"repository.basistech.ru/BASIS/terraform-provider-decort/internal/controller"
-	log "github.com/sirupsen/logrus"
 )
 
 func resourceK8sWgCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
@@ -61,35 +61,6 @@ func resourceK8sWgCreate(ctx context.Context, d *schema.ResourceData, m interfac
 	}
 
 	d.SetId(resp)
-
-	// This code is the supposed flow, but at the time of writing it's not yet implemented by the platfom
-
-	//urlValues = &url.Values{}
-	//urlValues.Add("auditId", strings.Trim(resp, `"`))
-
-	//for {
-	//resp, err := controller.decortAPICall("POST", AsyncTaskGetAPI, urlValues)
-	//if err != nil {
-	//return err
-	//}
-
-	//task := AsyncTask{}
-	//if err := json.Unmarshal([]byte(resp), &task); err != nil {
-	//return err
-	//}
-	//log.Debugf("resourceK8sCreate: workers group creating - %s", task.Stage)
-
-	//if task.Completed {
-	//if task.Error != "" {
-	//return fmt.Errorf("cannot create workers group: %v", task.Error)
-	//}
-
-	//d.SetId(strconv.Itoa(int(task.Result)))
-	//break
-	//}
-
-	//time.Sleep(time.Second * 5)
-	//}
 
 	return nil
 }

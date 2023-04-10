@@ -1,10 +1,23 @@
-## Version 3.5.2
+## Version 3.6.0
 
 ### Features
-- Add new datasource decort_kvmvm_snapshot_usage
-- Add the ability to change the size in the 'disks' block in the decort_kvmvm resource. Now when you change 'size' field in the block, the disk size on the platform will also be changed
+- Added validation for required fields in the following resources:
+	- disks
+	- lb
+	- image
+	- bservice
+	- vins
+	- k8s
+	- k8s_wg
+	- lb_frontend
+	- lb_frontend_bind
+	- lb_backed
+	- lb_backend_server
+- Added status handlers in create/update functions (where present)
 
-## Bug Fix
-- rule "release" in Makefile don't create the necessary archives
-- field "register_computes" in resource decort_resgroup is not used when creating the resource
-- removed unused optional fields in datasources
+### Bug Fixes
+- Fixed state inconsistency in the following resources/data sources:
+	- data_source_account
+	- resource_k8s
+	- resource_k8s_wg
+	- resource_account

@@ -35,6 +35,11 @@ package status
 type Status = string
 
 var (
+	// An object is Confirmed
+	// Status available for:
+	//  - Account
+	Confirmed Status = "CONFIRMED"
+
 	// The disk is linked to any Compute
 	// Status available for:
 	//  - Disk
@@ -45,12 +50,18 @@ var (
 	//  - Compute
 	//  - Disk
 	//  - Vins
+	//  - BasicService
+	//  - K8s Cluster
+	//  - Load Balancer
 	Enabled Status = "ENABLED"
 
 	// Enabling in process
 	// Status available for:
 	//  - Disk
 	//  - Vins
+	//  - BasicService
+	//  - K8s Cluster
+	//  - Load Balancer
 	Enabling Status = "ENABLING"
 
 	// An object disabled for operations
@@ -58,12 +69,19 @@ var (
 	//  - Compute
 	//  - Disk
 	//  - Vins
+	//  - Account
+	//  - BasicService
+	//  - K8s Cluster
+	//  - Load Balancer
 	Disabled Status = "DISABLED"
 
 	// Disabling in process
 	// Status available for:
 	//  - Disk
 	//  - Vins
+	//  - BasicService
+	//  - K8s Cluster
+	//  - Load Balancer
 	Disabling Status = "DISABLING"
 
 	// An object model has been created in the database
@@ -72,11 +90,17 @@ var (
 	//  - Disk
 	//  - Compute
 	//  - Vins
+	//  - BasicService
+	//  - K8s Cluster
+	//  - Load Balancer
 	Modeled Status = "MODELED"
 
 	// In the process of creation
 	// Status available for:
 	//  - Image
+	//  - Disk
+	//  - K8s Cluster
+	//  - Load Balancer
 	Creating Status = "CREATING"
 
 	// An object was created successfully
@@ -85,16 +109,21 @@ var (
 	//  - Disk
 	//  - Compute
 	//  - Vins
+	//  - K8s Cluster
+	//  - BasicService
+	//  - Load Balancer
 	Created Status = "CREATED"
 
 	// Physical resources are allocated for the object
 	// Status available for:
 	//  - Compute
+	//  - Disk
 	Allocated Status = "ALLOCATED"
 
 	// The object has released (returned to the platform) the physical resources that it occupied
 	// Status available for:
 	//  - Compute
+	//  - Disk
 	Unallocated Status = "UNALLOCATED"
 
 	// Destroying in progress
@@ -102,6 +131,10 @@ var (
 	//  - Disk
 	//  - Compute
 	//  - Vins
+	//  - Account
+	//  - BasicService
+	//  - K8s Cluster
+	//  - Load Balancer
 	Destroying Status = "DESTROYING"
 
 	// Permanently deleted
@@ -110,23 +143,36 @@ var (
 	//  - Disk
 	//  - Compute
 	//  - Vins
+	//  - Account
+	//  - BasicService
+	//  - K8s Cluster
+	//  - Load Balancer
 	Destroyed Status = "DESTROYED"
 
 	// Deleting in progress to Trash
 	// Status available for:
 	//  - Compute
 	//  - Vins
+	//  - BasicService
+	//  - K8s Cluster
+	//  - Load Balancer
 	Deleting Status = "DELETING"
 
 	// Deleted to Trash
 	// Status available for:
 	//  - Compute
 	//  - Vins
+	//  - Account
+	//  - BasicService
+	//  - Disk
+	//  - K8s Cluster
+	//  - Load Balancer
 	Deleted Status = "DELETED"
 
 	// Deleted from storage
 	// Status available for:
 	//  - Image
+	//  - Disk
 	Purged Status = "PURGED"
 
 	// Repeating deploy of the object in progress
@@ -138,4 +184,16 @@ var (
 	// Status available for:
 	//  - vins vnf
 	Stashed Status = "STASHED"
+
+	// Object is in restoration process
+	// Status available for:
+	//  - BasicService
+	//  - K8s Cluster
+	//  - Load Balancer
+	Restoring Status = "RESTORING"
+
+	// Object is in reconfiguration process
+	// Status available for:
+	//  - BasicService
+	Reconfiguring Status = "RECONFIGURING"
 )

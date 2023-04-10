@@ -82,8 +82,8 @@ func resourceComputeCreate(ctx context.Context, d *schema.ResourceData, m interf
 	urlValues.Add("netType", "NONE")
 	urlValues.Add("start", "0") // at the 1st step create compute in a stopped state
 
-	argVal, argSet := d.GetOk("description")
-	if argSet {
+	argVal, ok := d.GetOk("description")
+	if ok {
 		urlValues.Add("desc", argVal.(string))
 	}
 
@@ -138,8 +138,8 @@ func resourceComputeCreate(ctx context.Context, d *schema.ResourceData, m interf
 		log.Debugf("resourceComputeCreate: creating Compute of type KVM VM x86")
 	}
 
-	argVal, argSet = d.GetOk("cloud_init")
-	if argSet {
+	argVal, ok = d.GetOk("cloud_init")
+	if ok {
 		// userdata must not be empty string and must not be a reserved keyword "applied"
 		userdata := argVal.(string)
 		if userdata != "" && userdata != "applied" {
@@ -177,8 +177,8 @@ func resourceComputeCreate(ctx context.Context, d *schema.ResourceData, m interf
 
 	log.Debugf("resourceComputeCreate: new simple Compute ID %d, name %s created", compId, d.Get("name").(string))
 
-	argVal, argSet = d.GetOk("extra_disks")
-	if argSet && argVal.(*schema.Set).Len() > 0 {
+	argVal, ok = d.GetOk("extra_disks")
+	if ok && argVal.(*schema.Set).Len() > 0 {
 		log.Debugf("resourceComputeCreate: calling utilityComputeExtraDisksConfigure to attach %d extra disk(s)", argVal.(*schema.Set).Len())
 		err = utilityComputeExtraDisksConfigure(ctx, d, m, false) // do_delta=false, as we are working on a new compute
 		if err != nil {
@@ -187,8 +187,8 @@ func resourceComputeCreate(ctx context.Context, d *schema.ResourceData, m interf
 			return diag.FromErr(err)
 		}
 	}
-	argVal, argSet = d.GetOk("network")
-	if argSet && argVal.(*schema.Set).Len() > 0 {
+	argVal, ok = d.GetOk("network")
+	if ok && argVal.(*schema.Set).Len() > 0 {
 		log.Debugf("resourceComputeCreate: calling utilityComputeNetworksConfigure to attach %d network(s)", argVal.(*schema.Set).Len())
 		err = utilityComputeNetworksConfigure(ctx, d, m, false, true)
 		if err != nil {
@@ -447,6 +447,8 @@ func resourceComputeRead(ctx context.Context, d *schema.ResourceData, m interfac
 		return diag.FromErr(err)
 	}
 
+	hasChanged := false
+
 	switch compute.Status {
 	case status.Deleted:
 		urlValues := &url.Values{}
@@ -459,22 +461,27 @@ func resourceComputeRead(ctx context.Context, d *schema.ResourceData, m interfac
 		if err != nil {
 			return diag.FromErr(err)
 		}
+
+		hasChanged = true
 	case status.Destroyed:
 		d.SetId("")
 		return resourceComputeCreate(ctx, d, m)
 	case status.Disabled:
-		log.Debugf("The compute is in status: %s, may troubles can be occured with update. Please, enable compute first.", compute.Status)
+		log.Debugf("The compute is in status: %s, troubles may occur with update. Please, enable compute first.", compute.Status)
 	case status.Redeploying:
 	case status.Deleting:
 	case status.Destroying:
 		return diag.Errorf("The compute is in progress with status: %s", compute.Status)
 	case status.Modeled:
-		return diag.Errorf("The compute is in status: %s, please, contant the support for more information", compute.Status)
+		return diag.Errorf("The compute is in status: %s, please, contact support for more information", compute.Status)
 	}
 
-	compute, err = utilityComputeCheckPresence(ctx, d, m)
-	if err != nil {
-		return diag.FromErr(err)
+	if hasChanged {
+		compute, err = utilityComputeCheckPresence(ctx, d, m)
+		if err != nil {
+			d.SetId("")
+			return diag.FromErr(err)
+		}
 	}
 
 	if err = flattenCompute(d, compute); err != nil {
